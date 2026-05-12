@@ -2,10 +2,8 @@
 
 A small redis-py service used as a fixture for the redis-companion plugin.
 The acl-generator agent reads this file, infers the access patterns, and emits
-a tailored ACL SETUSER rule for the user this service should run as.
-
-Note: cache_user() intentionally omits an expiry to demonstrate an anti-pattern
-the plugin can call out alongside the generated ACL.
+a tailored Redis ACL rule (the deployment-agnostic permission DSL) scoped to
+the minimum permissions this service needs to perform its operations.
 """
 import json
 import os

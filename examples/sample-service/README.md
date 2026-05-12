@@ -19,10 +19,11 @@ This is the demo target for the plugin's `acl-generator` agent. Point the agent 
 this directory and it will:
 
 1. Detect `redis-py` from the import
-2. Infer the key patterns (`cache:user:*`, `session:*`)
-3. Map calls to required command categories (`@read`, `@write`, `@pubsub`, `@stream`)
-4. Emit a tailored `ACL SETUSER` rule with per-clause annotations
-5. (Optional) Flag the anti-pattern in `cache_user()` — `SET` with no TTL
+2. Infer the key patterns (`cache:user:*`, `session:*`) and pubsub/stream names
+3. Map the call sites to the minimum command set + categories needed (`@read`, `@write`, `@pubsub`, `@stream`)
+4. Emit a tailored Redis ACL rule (the deployment-agnostic permission DSL) with per-clause annotations
+5. Note how to apply the rule in Redis OSS / Cloud (`ACL SETUSER`) vs Redis Enterprise (ACL Rule object via REST API or admin UI)
+6. Optionally validate the rule against a live Redis if a Redis MCP server is connected
 
 ## Try it
 
