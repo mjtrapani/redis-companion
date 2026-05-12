@@ -1,0 +1,9 @@
+{
+  "name": "redis-companion",
+  "description": "Reads your service's code and generates a version-aware, annotated Redis ACL rule. Built for backend engineers wiring a new service into a shared Redis cluster where per-service ACLs are required instead of the default user.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Marko Trapani"
+  },
+  "license": "MIT"
+}
