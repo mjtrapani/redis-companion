@@ -5,10 +5,11 @@
       "args": [
         "--from",
         "redis-mcp-server@latest",
-        "redis-mcp-server",
-        "--url",
-        "${REDIS_URL}"
-      ]
+        "redis-mcp-server"
+      ],
+      "env": {
+        "REDIS_URL": "${REDIS_URL}"
+      }
     }
   }
 }

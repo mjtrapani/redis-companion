@@ -51,7 +51,7 @@ You should see the `redis-acl-patterns` skill auto-load and inform Claude's answ
 
 ## Try the demo
 
-A ~40-line sample service is included at `examples/sample-service/`. It uses `redis-py` and exercises strings, hashes, lists, sets, pub/sub, and streams.
+A ~40-line sample service is included at `examples/sample-service/`. It uses `redis-py` and exercises strings (SET/GET/MGET/SETEX), pub/sub (PUBLISH), and streams (XADD).
 
 In Claude Code:
 
