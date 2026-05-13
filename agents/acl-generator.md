@@ -110,7 +110,8 @@ Wait for the user's response. Do not proceed without explicit answers to all que
 When MCP tools for Redis are available, use them to enrich context **before** synthesis. These are read-only operations:
 
 - `ACL WHOAMI` — confirm current authenticated user
-- `ACL CAT` — enumerate the categories actually supported by the live server (more reliable than guessing from major version)
+- `ACL CAT` — enumerate the categories actually supported by the live server
+- `ACL CAT @<category>` — for **each category** your synthesis will touch (the categories implied by step 2e's command inventory), list the commands in it. **This is the authoritative source for the >50% category-collapse rule.** The skill's `command-category-map.md` is a fallback for degraded mode (no MCP) and a sanity check — `ACL CAT` reflects the target server's actual version *and* loaded modules.
 - `ACL LIST` / `ACL GETUSER` — inspect existing users for naming collisions and patterns
 
 Note what you learned. **Never** create, modify, or delete an ACL during this step — that's gated to step 7 with explicit user confirmation.
@@ -127,7 +128,7 @@ For each command in the inventory, identify its category (or categories) using t
 
 For each category that has *any* command used:
 
-- Count the total commands in the category (per the target version's `ACL CAT` or the skill's reference).
+- Determine the total commands in the category. **Preferred source: live `ACL CAT @<category>` from step 4 (MCP connected).** Fallback: the skill's `command-category-map.md`. If you fall back, note "using offline reference, version-specific drift possible" alongside the count.
 - Count how many of those commands the service actually uses.
 - **If used / total > 50%**: this is a collapse opportunity. The user was asked about this in step 3 — apply their answer.
 - **Else**: emit individual command grants (`+CMD1 +CMD2 ...`). Do not collapse to the category.
