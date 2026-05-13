@@ -5,7 +5,7 @@ Reads a Claude Code hook payload from stdin, scans Write/Edit/MultiEdit content
 for literal Redis credentials (env-var assignments, URIs with embedded auth,
 redis-cli auth flags), and blocks the write if a real credential is found.
 
-Recognized placeholders (e.g., REPLACE_WITH_PASSWORD, <password>, ${VAR}) are
+Recognized placeholders (e.g., <password>, ${VAR}, $REDIS_PASS) are
 allowed through — they're how the agent's own output is structured.
 """
 import json
@@ -124,8 +124,8 @@ def main() -> int:
         "(REDIS_PASS, etc.) at runtime, or use a secret manager. Don't commit "
         "literal credentials.\n\n"
         "If this is intentional (e.g., a test fixture or local-dev override), "
-        "use a recognized placeholder — REPLACE_WITH_PASSWORD, <password>, "
-        "${REDIS_PASS}, etc. — or temporarily disable the redis-companion plugin.\n"
+        "use a recognized placeholder — <password>, ${REDIS_PASS}, $REDIS_PASS, "
+        "etc. — or temporarily disable the redis-companion plugin.\n"
     )
     return 2  # Non-zero exit + stderr → Claude Code blocks the tool call.
 

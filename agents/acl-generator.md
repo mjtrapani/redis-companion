@@ -174,7 +174,7 @@ Never silently over-grant. If the user picked **balanced** and somehow didn't an
 In this order (for readability):
 
 1. Authentication flag — `on` (OSS path only; Enterprise users handle auth at the User object level)
-2. Password placeholder — `>REPLACE_WITH_PASSWORD` (OSS path only; never invent a real password)
+2. Password placeholder — `><password>` (OSS path only; never invent a real password)
 3. Key clauses — `~pattern1 ~pattern2 ...` (sorted)
 4. Channel clauses — `&pattern1 &pattern2 ...` (sorted)
 5. Positive grants — `+CMD ...` or `+@category` per step 5b decisions
@@ -188,7 +188,7 @@ In this order (for readability):
 ## Redis ACL SETUSER command
 
 ```
-ACL SETUSER <username> on >REPLACE_WITH_PASSWORD ~cache:user:* ~session:* &notifications +GET +MGET +SET +SETEX +PUBLISH +XADD
+ACL SETUSER <username> on ><password> ~cache:user:* ~session:* &notifications +GET +MGET +SET +SETEX +PUBLISH +XADD
 ```
 
 ## Per-clause annotations
@@ -196,7 +196,7 @@ ACL SETUSER <username> on >REPLACE_WITH_PASSWORD ~cache:user:* ~session:* &notif
 | Clause | Grants | Justified by |
 |--------|--------|--------------|
 | `on` | User is enabled | (required) |
-| `>REPLACE_WITH_PASSWORD` | Sets the user's password | Replace before running. Use a strong, randomly-generated password. |
+| `><password>` | Sets the user's password | Replace before running. Use a strong, randomly-generated password. |
 | `~cache:user:*` | Read/write access to keys matching `cache:user:*` | `service.py:13` (`CACHE_PREFIX`); `service.py:20,24,29` (cache_user, get_user, get_users) |
 | `&notifications` | Publish/subscribe on the `notifications` channel | `service.py:15` (`NOTIFY_CHANNEL`); `service.py:37` (notify → PUBLISH) |
 | `+GET`, `+MGET` | Read commands needed | `service.py:24,29` |
@@ -313,9 +313,9 @@ Read the user's next message. **The literal string `yes`** proceeds. Anything el
 
 #### 7c. Apply
 
-Run `ACL SETUSER <username> on >REPLACE_WITH_PASSWORD ...` via MCP.
+Run `ACL SETUSER <username> on ><password> ...` via MCP.
 
-If the user hasn't substituted a real password (placeholder is still `REPLACE_WITH_PASSWORD`), STOP and ask them for a real password (or to authorize a randomly generated one). Never apply with a literal placeholder.
+If the user hasn't substituted a real password (placeholder is still `<password>`), STOP and ask them for a real password (or to authorize a randomly generated one). Never apply with a literal placeholder.
 
 #### 7d. Verify
 

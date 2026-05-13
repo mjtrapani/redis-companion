@@ -66,7 +66,7 @@ The agent will:
 5. Emit something like:
 
 ```
-ACL SETUSER my-service-user on >REPLACE_WITH_PASSWORD ~cache:user:* ~session:* ~activity:events &notifications +GET +MGET +SET +SETEX +PUBLISH +XADD
+ACL SETUSER my-service-user on ><password> ~cache:user:* ~session:* ~activity:events &notifications +GET +MGET +SET +SETEX +PUBLISH +XADD
 ```
 
 …with a per-clause annotation table citing the source lines that justified each grant, plus instructions on how to apply (`ACL SETUSER` for OSS, "paste into an ACL Rule body" for Enterprise).
@@ -156,7 +156,7 @@ Task executor, in `agents/acl-generator.md`. Read-only filesystem access (Write/
 
 ### Hook: `credential-guard`
 
-PreToolUse hook on Write / Edit / MultiEdit, in `hooks/`. Blocks file writes that contain literal Redis credentials — connection strings with embedded passwords, `REDIS_PASS=` set to a real value, or `redis-cli -a <password>` invocations. Recognized placeholders (`REPLACE_WITH_PASSWORD`, `<password>`, `${REDIS_PASS}`, etc.) pass through, so the agent's own output isn't blocked. Defense-in-depth for the local working directory — separate from the live-server safety gate.
+PreToolUse hook on Write / Edit / MultiEdit, in `hooks/`. Blocks file writes that contain literal Redis credentials — connection strings with embedded passwords, `REDIS_PASS=` set to a real value, or `redis-cli -a <password>` invocations. Recognized placeholders (`<password>`, `${REDIS_PASS}`, `$REDIS_PASS`, etc.) pass through, so the agent's own output isn't blocked. Defense-in-depth for the local working directory — separate from the live-server safety gate.
 
 ### MCP config
 
