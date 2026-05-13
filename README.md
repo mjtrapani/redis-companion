@@ -8,7 +8,7 @@ A Claude Code plugin that reads your service's code and generates a least-privil
 
 You point it at a backend service's directory. It detects the Redis client library, infers the access patterns (keys, channels, streams, commands), asks you a few targeted questions (target edition, version, permission granularity, defense-in-depth preference), and emits a Redis ACL rule that grants only what the service actually needs.
 
-For Redis OSS, it emits a full `ACL SETUSER` command and can apply it via the Redis MCP after a safety gate. For Redis Enterprise and Redis Cloud, it emits just the ACL Rule body — paste into the admin UI or REST API.
+For Redis OSS, it emits a full `ACL SETUSER` command ready to paste into `redis-cli`. For Redis Enterprise and Redis Cloud, it emits just the ACL Rule body — paste into the admin UI or REST API.
 
 ## Who it's for
 
@@ -53,7 +53,7 @@ A ~40-line sample service is included at `examples/sample-service/`. It uses `re
 
 In Claude Code:
 
-```
+```code
 /redis-companion:analyze examples/sample-service
 ```
 
@@ -65,7 +65,7 @@ The agent will:
 4. Ask you for: target Redis **edition** (OSS / Enterprise), target Redis **major version** (6 / 7 / 8), **defense-in-depth deny** preference, and **permission granularity** (strict / balanced / brevity)
 5. Emit something like:
 
-```
+```code
 ACL SETUSER my-service-user on ><changeme> ~cache:user:* ~session:* ~activity:events &notifications +GET +MGET +SET +SETEX +PUBLISH +XADD
 ```
 
@@ -73,13 +73,13 @@ ACL SETUSER my-service-user on ><changeme> ~cache:user:* ~session:* ~activity:ev
 
 You can also invoke conversationally:
 
-```
+```text
 scope a Redis ACL for examples/sample-service
 ```
 
 …and Claude will route to the agent via its description.
 
-## Optional: connect a Redis MCP for live validation and apply
+## Optional: connect a Redis MCP for live version detection
 
 The plugin works fully without an MCP connection. With one, you get one additional capability today, with more planned:
 
@@ -98,7 +98,7 @@ export REDIS_URL='redis://default:<password>@localhost:6379/0'
 export REDIS_URL='redis://localhost:6379'
 ```
 
-Then restart Claude Code. After restart, `mcp__redis__*` tools will be available, the agent will use them automatically when relevant, and `apply` will be enabled in OSS output.
+Then restart Claude Code. After restart, `mcp__redis__*` tools will be available, and the agent will read your Redis server version from `INFO SERVER` automatically instead of asking you for it.
 
 ### About the `/doctor` warning
 
