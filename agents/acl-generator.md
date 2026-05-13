@@ -186,7 +186,7 @@ Type `apply` to apply this rule against the MCP-connected Redis. You'll see a sa
 - **Target Redis edition:** OSS (asked)
 - **Target Redis version:** 7.x (asked)
 - **Defense-in-depth denies:** {included / not included} (asked)
-- **MCP status:** {connected — categories confirmed via `ACL CAT` / not connected — type `apply` to see one-step setup, or see README §MCP setup}
+- **MCP status:** {connected — categories confirmed via `ACL CAT` / **not connected** — without an MCP connection, live category verification and the `apply` workflow (safety-gated provisioning + impersonation test) aren't available. The rule is generated from the baked command-category map. Type `apply` for one-step MCP setup, or see README §MCP setup.}
 ````
 
 #### 6b. Enterprise output
@@ -223,7 +223,7 @@ Then create or attach the ACL Rule to a **Role**, and assign the Role to a **Use
 - **Target Redis edition:** Enterprise (asked — cannot be reliably detected via Redis commands alone)
 - **Target Redis version:** 7.x (asked — this is the *database* version; cluster-version-aware feature gating is future work)
 - **Defense-in-depth denies:** {included / not included} (asked)
-- **MCP status:** {connected — read-side context queried / not connected}
+- **MCP status:** {connected — read-side context (`ACL CAT`, `ACL LIST`, `ACL WHOAMI`) queried / **not connected** — without an MCP connection, live category verification against the target server isn't available, so the rule is generated from the baked command-category map. (Note: `apply` is not supported on Enterprise regardless of MCP — Enterprise ACLs are applied via admin UI or REST API.) See README §MCP setup to enable live verification.}
 ````
 
 ### 7. (Optional, OSS only) Apply — with safety gate
