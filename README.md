@@ -125,15 +125,13 @@ flowchart TD
         A --> B[Load redis-acl-patterns skill]:::node
         B --> C["Scan directory · detect client library\ncommands · key patterns · channels · streams"]:::node
         C --> D{MCP connected?}:::gate
-        D -->|Yes| E["INFO SERVER · ACL CAT\nACL LIST · ACL GETUSER"]:::red
+        D -->|Yes| E["INFO SERVER → version"]:::red
         D -->|No| F[Baked skill reference]:::node
-        E --> G["Ask: edition · granularity · defense-in-depth"]:::node
+        E --> G["Ask: edition · version (no MCP) · granularity · defense-in-depth"]:::node
         F --> G
         G --> H["Synthesize rule · version-aware\ncategory-collapse where >50%"]:::node
         H --> I[Annotated rule output with per-term source citations]:::red
-        I --> J{OSS + MCP?}:::gate
-        J -->|Yes| K["Safety-gated apply\nACL SETUSER → verify → validate"]:::red
-        J -->|No| L[Manual apply instructions]:::node
+        I --> L["Manual apply instructions\nredis-cli ACL SETUSER"]:::node
     end
 
     I --> U
@@ -152,17 +150,17 @@ Knowledge base, in `skills/redis-acl-patterns/`. Loads automatically when conver
 
 ### Agent: `acl-generator`
 
-Task executor, in `agents/acl-generator.md`. Read-only filesystem access (Write/Edit/MultiEdit/Bash are disallowed — only Read, Grep, and Glob for code discovery). Inherits MCP tools from the session when the Redis MCP is connected. Process: load knowledge → discover from code → ask the user (batched) → optional MCP discovery → synthesize the rule → emit annotated output → offer apply (OSS + MCP only) behind a safety gate.
+Task executor, in `agents/acl-generator.md`. Read-only filesystem access (Write/Edit/MultiEdit/Bash are disallowed — only Read, Grep, and Glob for code discovery). Inherits MCP tools from the session when the Redis MCP is connected. Process: load knowledge → discover from code → ask the user (batched, must stop and wait for answers) → optional version probe via INFO SERVER (MCP only) → synthesize the rule → emit annotated output with `redis-cli` apply instructions.
 
 When a client library method isn't in the skill's reference, the agent makes one targeted WebFetch to the library's official API docs before flagging it as uncertain. Hard fallback on ambiguity or fetch failure — no link-following, no retries.
 
 ### Hook: `credential-guard`
 
-PreToolUse hook on Write / Edit / MultiEdit, in `hooks/`. Blocks file writes that contain literal Redis credentials — connection strings with embedded passwords, `REDIS_PASS=` set to a real value, or `redis-cli -a <password>` invocations. Recognized placeholders (`<replace_password_here>`, `${REDIS_PASS}`, `$REDIS_PASS`, etc.) pass through, so the agent's own output isn't blocked. Defense-in-depth for the local working directory — separate from the live-server safety gate.
+PreToolUse hook on Write / Edit / MultiEdit, in `hooks/`. Blocks file writes that contain literal Redis credentials — connection strings with embedded passwords, `REDIS_PASS=` set to a real value, or `redis-cli -a <password>` invocations. Recognized placeholders (`><changeme>`, `${REDIS_PASS}`, `$REDIS_PASS`, etc.) pass through, so the agent's own output isn't blocked.
 
 ### MCP config
 
-Declared in `plugin.json`, wires the Redis MCP server (`redis/mcp-redis`) using `${REDIS_URL}`. Auto-starts when the env var is set, stays out of the way otherwise. All ACL-related Redis commands (`ACL CAT`, `ACL LIST`, `ACL GETUSER`, `ACL SETUSER`, `ACL WHOAMI`) are exposed as tools when connected.
+Declared in `plugin.json`, wires the Redis MCP server (`redis/mcp-redis`) using `${REDIS_URL}`. Auto-starts when the env var is set, stays out of the way otherwise. The `redis/mcp-redis` server exposes data-plane operations — `INFO SERVER` is used to read the Redis version. ACL commands (`ACL CAT`, `ACL LIST`, `ACL SETUSER`, etc.) are not exposed by this MCP server; apply is done manually via `redis-cli`.
 
 ## Limitations
 
