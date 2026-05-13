@@ -29,7 +29,7 @@ You need [Claude Code](https://code.claude.com/) installed and authenticated.
 In any Claude Code session:
 
 1. Open `/plugins`
-2. Add marketplace → paste `github:mjtrapani/redis-companion`
+2. Add marketplace → paste `mjtrapani/redis-companion`
 3. Install **redis-companion**
 4. Restart Claude Code
 
@@ -144,9 +144,9 @@ Task executor, in `agents/acl-generator.md`. Read-only filesystem access (Write/
 
 PreToolUse hook on Write / Edit / MultiEdit, in `hooks/`. Blocks file writes that contain literal Redis credentials — `REDIS_PASS=` with a real value, `redis://user:pw@host`, or `redis-cli -a <pw>`. Recognized placeholders (`REPLACE_WITH_PASSWORD`, `<password>`, `${REDIS_PASS}`, etc.) pass through, so the agent's own output isn't blocked. Defense-in-depth for the local working directory — separate from the live-server safety gate.
 
-### MCP config: `.mcp.json`
+### MCP config
 
-Wires the Redis MCP server (`redis/mcp-redis`) using `${REDIS_URL}`. Auto-starts when the env var is set, stays out of the way otherwise. All ACL-related Redis commands (`ACL CAT`, `ACL LIST`, `ACL GETUSER`, `ACL SETUSER`, `ACL WHOAMI`) are exposed as tools when connected.
+Declared in `plugin.json`, wires the Redis MCP server (`redis/mcp-redis`) using `${REDIS_URL}`. Auto-starts when the env var is set, stays out of the way otherwise. All ACL-related Redis commands (`ACL CAT`, `ACL LIST`, `ACL GETUSER`, `ACL SETUSER`, `ACL WHOAMI`) are exposed as tools when connected.
 
 ## Limitations
 

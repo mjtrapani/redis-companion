@@ -5,5 +5,18 @@
   "author": {
     "name": "Marko Trapani"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "mcpServers": {
+    "redis": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "redis-mcp-server@latest",
+        "redis-mcp-server"
+      ],
+      "env": {
+        "REDIS_URL": "${REDIS_URL}"
+      }
+    }
+  }
 }
