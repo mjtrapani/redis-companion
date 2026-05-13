@@ -8,7 +8,7 @@ A Claude Code plugin that reads your service's code and generates a least-privil
 
 You point it at a backend service's directory. It detects the Redis client library, infers the access patterns (keys, channels, streams, commands), asks you a few targeted questions (target edition, version, permission granularity, defense-in-depth preference), and emits a Redis ACL rule that grants only what the service actually needs.
 
-For Redis OSS / Redis Cloud direct-connect, it emits a full `ACL SETUSER` command and can apply it via the Redis MCP after a safety gate. For Redis Enterprise, it emits just the ACL Rule body — paste into the admin UI or REST API.
+For Redis OSS, it emits a full `ACL SETUSER` command and can apply it via the Redis MCP after a safety gate. For Redis Enterprise and Redis Cloud, it emits just the ACL Rule body — paste into the admin UI or REST API.
 
 ## Who it's for
 
