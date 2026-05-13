@@ -107,11 +107,20 @@ For each speculation candidate in Phase 1's discovery summary, add a question. F
   - label: "Include now" — description: "Grant `+SUBSCRIBE` and the `&notifications` channel for subscribe. Rule covers the planned addition without re-running."
   - label: "Leave out (recommended)" — description: "Stricter least-privilege. Re-run me when subscribe is actually wired up."
 
-Call `AskUserQuestion` ONCE with all the above questions in a single call. Do not split into multiple calls. Do not narrate before/after the call — let the structured UI carry the interaction.
+Call `AskUserQuestion` with these questions. The `AskUserQuestion` platform limit is 4 questions per call — so when Q5 fires, split into two calls: first the 4 baseline questions, then Q5 separately. (One call when no speculation candidates were found.) Do not narrate before/after the calls — let the structured UI carry the interaction.
 
 ### Phase 3 — Synthesis (sub-agent)
 
-Spawn the `acl-generator` agent again with this prompt:
+**Compute the effective target version before dispatching.** This is how minor-version filtering works:
+
+- **If Phase 1's discovery summary included a `redis_version` from `INFO SERVER` (e.g., `8.6.3`):** use that exact version. The agent will filter the category map by `Since: <= 8.6.3`, so commands like `HEXPIRE` (Since 7.4.0) are included only if 7.4.0 ≤ 8.6.3 — yes, included.
+- **If Phase 1 reported "MCP not connected" (no version pre-read):** the user's Q2 answer gives only a major version. Use the **latest known minor** of that major as the assumed cutoff:
+  - Redis 8 → `8.6` (matches the current upstream-derived map)
+  - Redis 7 → `7.4`
+  - Redis 6 → `6.2`
+  This is an assumption — note it in the Detected Context block.
+
+Spawn the `acl-generator` agent with this prompt:
 
 > **Mode: SYNTHESIS.**
 >
@@ -123,12 +132,14 @@ Spawn the `acl-generator` agent again with this prompt:
 >
 > The user answered:
 > - Edition: <answer to Q1>
-> - Version: <answer to Q2>
+> - Version (major): <answer to Q2>
 > - Defense-in-depth denies: <answer to Q3>
 > - Granularity: <answer to Q4>
 > - Speculation candidates: <answer(s) to Q5, one per candidate>
 >
-> Run steps 5 (synthesize), 6 (emit output) from your standard process. Apply version-aware category filtering using the upstream-derived `command-category-map.md` and `version-deltas.md`. Use the username derived from the analyzed directory's basename (`<basename of $ARGUMENTS>`) — if it has invalid Redis username chars, fall back to `my-service-user`.
+> **Effective target version for filtering: `<exact_version>`** (either from `INFO SERVER` directly, or the assumed latest minor of the user's major-version pick — state which one explicitly here). Filter the `command-category-map.md` such that only commands with `Since: <= <exact_version>` are eligible. Surface this version assumption in the Detected Context output.
+>
+> Run S1 (map commands → categories with version filtering), S2 (decide grant strategy), S3 (compose rule body), and emit the OSS or Enterprise output per the user's edition answer. Use the username derived from the analyzed directory's basename (`<basename of $ARGUMENTS>`) — if it has invalid Redis username chars, fall back to `my-service-user`.
 >
 > Required output sections, in order:
 > 1. The `ACL SETUSER <user> on ><changeme> ...` command (OSS) or rule body only (Enterprise)

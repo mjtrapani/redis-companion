@@ -151,9 +151,15 @@ Your job: produce the final ACL rule with annotations and apply instructions. No
 
 ### Synthesis process
 
-#### S1. Map commands → categories using the upstream-derived map
+#### S1. Map commands → categories using the upstream-derived map, filtered by exact version
 
-For each command in the discovery inventory, identify its categories using the skill's `command-category-map.md` (generated from `redis/redis@8.6.3/src/commands/*.json` — regeneratable via `scripts/build-category-map.py`). Filter by each command's `Since:` annotation for the target Redis version: a command with `Since: 7.0.0` is unavailable on Redis 6.x.
+For each command in the discovery inventory, identify its categories using the skill's `command-category-map.md` (generated from `redis/redis@8.6.3/src/commands/*.json` — regeneratable via `scripts/build-category-map.py`).
+
+**Filter by exact version, not major version.** The synthesis prompt passes an *effective target version* like `8.6.3` (from `INFO SERVER` directly) or `7.4` (the latest minor assumed for a user who picked "Redis 7" with no MCP). Use that exact version as the cutoff:
+
+- A command with `Since: 7.4.0` is eligible only if the effective version `≥ 7.4.0`. So `HEXPIRE` (Since 7.4.0) is included for target `8.6.3` and `7.4` but excluded for `7.0` or `6.2`.
+- A command with `Since: 1.0.0` is eligible for every supported target.
+- If you grant a command unavailable on the target version, `ACL SETUSER` will reject the rule. So under-include rather than over-include when the version is uncertain.
 
 Apply cross-version category re-classifications from `version-deltas.md` on top of the map. The main case: `EVAL`/`EVALSHA` are in `@scripting` per the upstream-derived map (Redis 7+), but were in `@write` on Redis 6.x.
 
@@ -236,11 +242,11 @@ redis-cli -h localhost -p 6379 \
 
 - **Client library:** <name> (<source>)
 - **Target Redis edition:** OSS (asked)
-- **Target Redis version:** <X> (<read from INFO SERVER | asked>)
+- **Target Redis version:** Redis <major> (user-confirmed) — **effective version for filtering: `<exact_version>`** (from `INFO SERVER` directly, OR assumed latest minor of the user's major if MCP was not connected; e.g., `Redis 7 (assumed minor 7.4)`)
 - **Defense-in-depth denies:** <included | not included> (asked)
 - **Permission granularity:** <strict | balanced | favor brevity> (asked)
 - **Speculation candidate(s):** <left out | included> (asked) — if any flagged in discovery
-- **MCP status:** <connected — Redis version read from INFO SERVER | not connected>
+- **MCP status:** <connected — Redis version read from INFO SERVER as <exact> | not connected — version assumed as latest minor of user's major>
 - **Mapping notes:** <from discovery>
 ````
 
