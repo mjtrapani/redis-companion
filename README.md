@@ -155,6 +155,8 @@ Knowledge base, in `skills/redis-acl-patterns/`. Loads automatically when conver
 
 Task executor, in `agents/acl-generator.md`. Read-only filesystem access (Write/Edit/MultiEdit are disallowed). Inherits MCP tools from the session when the Redis MCP is connected. Process: load knowledge → discover from code → ask the user (batched) → optional MCP discovery → synthesize the rule → emit annotated output → offer apply (OSS + MCP only) behind a safety gate.
 
+When a client library method isn't in the skill's reference, the agent makes one targeted WebFetch to the library's official API docs before flagging it as uncertain. Hard fallback on ambiguity or fetch failure — no link-following, no retries.
+
 ### Hook: `credential-guard`
 
 PreToolUse hook on Write / Edit / MultiEdit, in `hooks/`. Blocks file writes that contain literal Redis credentials — connection strings with embedded passwords, `REDIS_PASS=` set to a real value, or `redis-cli -a <password>` invocations. Recognized placeholders (`<password>`, `${REDIS_PASS}`, `$REDIS_PASS`, etc.) pass through, so the agent's own output isn't blocked. Defense-in-depth for the local working directory — separate from the live-server safety gate.
