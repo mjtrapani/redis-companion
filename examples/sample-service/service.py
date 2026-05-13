@@ -37,6 +37,7 @@ def create_session(token: str, user_id: str) -> None:
 
 
 def notify(event: dict) -> int:
+    # TODO: add a subscribe handler for inbound notifications from other services
     return r.publish(NOTIFY_CHANNEL, json.dumps(event))
 
 
