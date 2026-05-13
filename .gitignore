@@ -26,3 +26,7 @@ npm-debug.log*
 dump.rdb
 *.rdb
 appendonly.aof
+
+# Local-only spec / assignment materials (not for publishing)
+# No trailing slash — must also match the symlink, not just a directory.
+.spec
