@@ -1217,7 +1217,7 @@
 
 ```bash
 # From the repo root:
-./scripts/build-category-map.py > skills/redis-acl-patterns/references/command-category-map.md
+./scripts/build-category-map.py > skills/acl-reference/references/command-category-map.md
 ```
 
 The script downloads the source tarball for the pinned Redis tag, extracts `src/commands/*.json`, and rebuilds this document. Bump the pinned tag in the script's header to regenerate for a different Redis release.

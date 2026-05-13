@@ -65,7 +65,7 @@ Same shape, different domain. Each one is a real plugin idea you could ship in a
 
 2. **Replace the skill's reference docs**
 
-   The skill (`skills/redis-acl-patterns/`) becomes your domain's knowledge base. Rename the directory (e.g., to `postgres-grant-patterns`), update the `description` frontmatter in `SKILL.md` so it fires on your domain's keywords, and replace the four reference docs with your domain's syntax, version deltas, client-library patterns, and resource-extraction heuristics.
+   The skill (`skills/acl-reference/`) becomes your domain's knowledge base. Rename the directory (e.g., to `postgres-grant-patterns`), update the `description` frontmatter in `SKILL.md` so it fires on your domain's keywords, and replace the four reference docs with your domain's syntax, version deltas, client-library patterns, and resource-extraction heuristics.
 
 3. **Adjust the agent's system prompt**
 

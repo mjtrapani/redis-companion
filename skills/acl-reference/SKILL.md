@@ -1,10 +1,13 @@
 ---
 description: Use when working with Redis client code, generating or reviewing Redis ACL rules, or discussing Redis access-control syntax. Provides the Redis ACL DSL primer, OSS-vs-Enterprise fork map, and pointers to detailed reference docs (command-category mappings, version deltas, client-library patterns, key-pattern extraction).
+user-invocable: false
 ---
 
-# redis-acl-patterns
+# acl-reference
 
-Knowledge base for Redis Access Control Lists (ACLs). Loads automatically when the conversation touches Redis client code, ACL rule construction, or ACL syntax discussion. Also loaded by the companion `acl-generator` agent at task start.
+Knowledge base for Redis Access Control Lists (ACLs). Model-invocable only — Claude auto-loads this skill when the conversation touches Redis client code, ACL rule construction, or ACL syntax discussion. It's also loaded explicitly by the companion `acl-generator` agent at task start.
+
+Why hidden from the user's slash menu: invoking a knowledge base via `/` isn't a meaningful action. When a user asks a question like *"what does `+@read` grant in Redis 7?"*, the skill description matches and Claude loads this content automatically — no slash command needed. For *actions* (generating a rule for a specific service), use `/redis-companion:rule <path>` instead.
 
 ## What lives here
 
@@ -145,5 +148,5 @@ If the user wants to **generate a complete Redis ACL rule for a specific service
 
 Invocation paths:
 - Natural language: *"scope an ACL for ./my-service"*
-- Slash command: `/redis-companion:analyze <path>`
+- Slash command: `/redis-companion:rule <path>`
 - Agent picker: `/agents` → `acl-generator`

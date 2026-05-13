@@ -158,7 +158,7 @@ def main():
     print()
     print("```bash")
     print("# From the repo root:")
-    print("./scripts/build-category-map.py > skills/redis-acl-patterns/references/command-category-map.md")
+    print("./scripts/build-category-map.py > skills/acl-reference/references/command-category-map.md")
     print("```")
     print()
     print("The script downloads the source tarball for the pinned Redis tag, extracts `src/commands/*.json`, and rebuilds this document. Bump the pinned tag in the script's header to regenerate for a different Redis release.")

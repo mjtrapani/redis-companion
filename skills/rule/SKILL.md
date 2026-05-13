@@ -1,20 +1,20 @@
 ---
-description: Synthesize a least-privilege Redis ACL rule for the codebase at the given path. Use when invoked via `/redis-companion:analyze <path>` or when the user explicitly asks to analyze a service for Redis ACL synthesis with a path argument. Orchestrates the `acl-generator` agent across two phases (discovery, synthesis) and gathers user input between them via `AskUserQuestion`.
+description: Generate a least-privilege Redis ACL rule for the codebase at the given path. Use when invoked via `/redis-companion:rule <path>` or when the user explicitly asks to scope or generate a Redis ACL rule for a service with a path argument. Orchestrates the `acl-generator` agent across two phases (discovery, synthesis) and gathers user input between them via `AskUserQuestion`.
 ---
 
-# Analyze a service for Redis ACL synthesis
+# Generate a Redis ACL rule for a service
 
-The user requested analysis of the path: `$ARGUMENTS`
+The user requested a rule for the path: `$ARGUMENTS`
 
 ## If `$ARGUMENTS` is empty or missing
 
 Respond exactly with:
 
-> The `/redis-companion:analyze` command needs a path argument.
+> The `/redis-companion:rule` command needs a path argument.
 >
-> **Usage:** `/redis-companion:analyze <path>`
+> **Usage:** `/redis-companion:rule <path>`
 >
-> **Example:** `/redis-companion:analyze ./my-service`
+> **Example:** `/redis-companion:rule ./my-service`
 >
 > If you want a more conversational entry point, just say something like *"scope a Redis ACL for ./my-service"* and Claude will route you to the `acl-generator` agent.
 
@@ -50,7 +50,7 @@ Spawn the `acl-generator` sub-agent via the Task tool with this prompt:
 > - **Server version from `INFO SERVER`** if MCP is connected (else: note "MCP not connected")
 > - **Mapping notes** (any ambiguous client-library method→command mappings you flagged via step 2g)
 >
-> Permitted tools: `Read`, `Grep`, `Glob`, `Skill` (for loading `redis-acl-patterns` once), `mcp__plugin_redis-companion_redis__info` (INFO SERVER, once), `WebFetch` (one-shot, for ambiguous mappings). Forbidden: `Bash`, any data-reading MCP tool (`scan_keys`, `get`, `hgetall`, etc.).
+> Permitted tools: `Read`, `Grep`, `Glob`, `Skill` (for loading `acl-reference` once), `mcp__plugin_redis-companion_redis__info` (INFO SERVER, once), `WebFetch` (one-shot, for ambiguous mappings). Forbidden: `Bash`, any data-reading MCP tool (`scan_keys`, `get`, `hgetall`, etc.).
 
 Wait for the agent's return. Read the discovery summary carefully — you will use it to format Phase 2 questions and pass it back to the agent in Phase 3.
 

@@ -45,7 +45,7 @@ claude --plugin-dir .
 
 To verify either install, run `/agents` in the Claude Code prompt — you should see `acl-generator` in the list.
 
-You can also confirm the skill is active by asking something Redis-adjacent, like *"what does `+@read` grant in Redis 7?"* — the `redis-acl-patterns` skill should auto-load and inform the answer.
+You can also confirm the knowledge-base skill is active by asking something Redis-adjacent, like *"what does `+@read` grant in Redis 7?"* — the `acl-reference` skill should auto-load (you won't see it in the slash menu by design — it's a model-invocable knowledge base, not an action command) and inform Claude's answer.
 
 ## Try the demo
 
@@ -54,7 +54,7 @@ A ~40-line sample service is included at `examples/sample-service/`. It uses `re
 In Claude Code:
 
 ```code
-/redis-companion:analyze examples/sample-service
+/redis-companion:rule examples/sample-service
 ```
 
 The agent will:
@@ -118,10 +118,10 @@ flowchart TD
     classDef node   fill:#1c2b3a,stroke:#334155,color:#e2e8f0
     classDef gate   fill:#0d1520,stroke:#334155,color:#cbd5e1
 
-    U([User]):::entry -->|"/redis-companion:analyze path"| S
+    U([User]):::entry -->|"/redis-companion:rule path"| S
 
     subgraph P["redis-companion"]
-        S[analyze skill orchestrator]:::red
+        S[rule skill orchestrator]:::red
         S -->|"Phase 1: dispatch DISCOVERY"| A1[acl-generator agent · DISCOVERY mode]:::red
         A1 --> SCAN["Scan directory · detect client library\ncommands · key patterns · channels · streams\nINFO SERVER for version (MCP)"]:::node
         SCAN -->|"discovery summary returned"| S
@@ -136,17 +136,17 @@ flowchart TD
     S --> U
 ```
 
-The plugin is five cooperating components, each doing one job. The `analyze` skill orchestrates a three-phase flow: it dispatches the agent for **discovery**, pauses for **user input** via `AskUserQuestion`, then dispatches the agent again for **synthesis**. This pattern exists because Claude Code sub-agents run single-shot — they can't pause mid-execution to ask the user a question. So the interactive step lives in the inline skill, between two stateless agent dispatches.
+The plugin is five cooperating components, each doing one job. The `rule` skill orchestrates a three-phase flow: it dispatches the agent for **discovery**, pauses for **user input** via `AskUserQuestion`, then dispatches the agent again for **synthesis**. This pattern exists because Claude Code sub-agents run single-shot — they can't pause mid-execution to ask the user a question. So the interactive step lives in the inline skill, between two stateless agent dispatches.
 
-### Skill: `analyze` (orchestrator)
+### Skill: `rule` (orchestrator)
 
-In `skills/analyze/`. Triggered by `/redis-companion:analyze <path>` or by natural-language requests. Runs inline in the main conversation. Owns the interactive contract: it dispatches the `acl-generator` agent in `DISCOVERY` mode, parses the structured findings, calls `AskUserQuestion` with the four baseline questions plus any conditional questions surfaced from discovery (speculation candidates, multi-language detection), then dispatches the agent again in `SYNTHESIS` mode with the user's answers baked in.
+In `skills/rule/`. Triggered by `/redis-companion:rule <path>` or by natural-language requests. Runs inline in the main conversation. Owns the interactive contract: it dispatches the `acl-generator` agent in `DISCOVERY` mode, parses the structured findings, calls `AskUserQuestion` with the four baseline questions plus any conditional questions surfaced from discovery (speculation candidates, multi-language detection), then dispatches the agent again in `SYNTHESIS` mode with the user's answers baked in.
 
 `AskUserQuestion` is the load-bearing primitive — it's the only Claude Code mechanism that actually pauses the conversation for structured user input. Natural-language "wait for the user" instructions don't enforce a pause, which is why earlier versions of this plugin had the agent skipping questions and silently picking defaults.
 
-### Skill: `redis-acl-patterns` (knowledge base)
+### Skill: `acl-reference` (knowledge base — model-invocable only)
 
-In `skills/redis-acl-patterns/`. Loads automatically when conversation touches Redis client code or ACL syntax. Contains the ACL DSL primer, the OSS vs Enterprise fork map, and pointers to four detailed references that load on demand:
+In `skills/acl-reference/`. **Hidden from the user's `/` menu** via `user-invocable: false`. Loads automatically when Claude sees Redis client code or ACL syntax in conversation (description-triggered), and is loaded explicitly by the `acl-generator` agent at task start. The split is intentional: invoking a knowledge base via slash isn't a meaningful *action*, so it's removed from the action menu — but the content is still pulled in whenever Claude is reasoning about Redis. Contains the ACL DSL primer, the OSS vs Enterprise fork map, and pointers to four detailed references that load on demand:
 
 - `command-category-map.md` — categories → commands for the >50% category-collapse rule. **Generated from upstream `redis/redis@8.6.3` command JSONs** via `scripts/build-category-map.py` — every entry is verifiable against the official Redis source. Each command annotated with its `Since:` version so the agent can filter for older targets.
 - `version-deltas.md` — Redis 6 / 7 / 8 changes (scripting split, selectors, module-category expansion)
