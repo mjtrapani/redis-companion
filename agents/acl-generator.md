@@ -94,11 +94,13 @@ For absolute certainty on any flagged call, recommend the user run `MONITOR` aga
 
 If MCP tools are available, run `INFO SERVER` before asking the user. Use it to inform the **version** question (step 3, question 2) — `redis_version` gives the server version, which the user may not know off the top of their head.
 
-Do **not** use INFO output to infer edition. Redis Cloud sanitizes INFO: `redis_build_id` is all zeros, `redis_mode` shows `standalone`, and no Enterprise strings appear — even on paid Enterprise tiers. The only reliable signal would be "Redis Enterprise" / "rlec" in `redis_build_id` for some self-managed Redis Software deployments, but this is absent on Redis Cloud. Always ask the user for edition explicitly (step 3, question 1).
+Do **not** use INFO output to infer edition. Redis Cloud sanitizes INFO: `redis_build_id` is all zeros, `redis_mode` shows `standalone`, and no Enterprise strings appear — even on paid Enterprise tiers. The only reliable signal would be "Redis Enterprise" / "rlec" in `redis_build_id` for some self-managed Redis Software deployments, but this is absent on Redis Cloud. Always ask the user for edition explicitly (step 3, question 1). **Even if INFO shows `standalone`, you must still ask.**
 
 ### 3. Ask the user (batched, before synthesis)
 
 After discovery, ask these questions **in a single batched prompt**. Do not synthesize until the user answers. The baseline is four questions (1–4); additional conditional questions (5, 6) only fire if discovery surfaced something that needs them.
+
+**This step is mandatory and cannot be skipped.** Do not attempt to infer the answers from static analysis, INFO output, or any other signal. Even if you believe you know the edition or version, you must ask. The user's answer is the authoritative input — your inference is not.
 
 ```
 Before I synthesize the rule, four questions (plus follow-ups based on what I found):
@@ -147,6 +149,8 @@ When MCP tools for Redis are available, use them to enrich context **before** sy
 - `ACL CAT` — enumerate the categories actually supported by the live server
 - `ACL CAT @<category>` — for **each category** your synthesis will touch (the categories implied by step 2e's command inventory), list the commands in it. **This is the authoritative source for the >50% category-collapse rule.** The skill's `command-category-map.md` is a fallback for degraded mode (no MCP) and a sanity check — `ACL CAT` reflects the target server's actual version *and* loaded modules.
 - `ACL LIST` / `ACL GETUSER` — inspect existing users for naming collisions and patterns
+
+**Permitted MCP tools in this step:** only the four above, plus `INFO SERVER` (from step 2h). Do **not** call key-scanning tools (`scan_keys`, `scan_all_keys`, `get`, `hgetall`, `lrange`, etc.) or any command that reads application data from the database. ACL generation is a static analysis task — you learn the access pattern from the source code, not by inspecting the live data model.
 
 Note what you learned. **Never** create, modify, or delete an ACL during this step — that's gated to step 7 with explicit user confirmation.
 

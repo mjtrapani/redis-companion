@@ -97,7 +97,7 @@ The ACL DSL itself is identical on both editions. What differs is **how a rule i
 
 ### What this means for rule output
 
-- **For Redis OSS / Redis Cloud**: emit a full `ACL SETUSER <user> on >REPLACE_WITH_PASSWORD <rule>` command — directly runnable via `redis-cli`.
+- **For Redis OSS**: emit a full `ACL SETUSER <user> on ><password> <rule>` command — directly runnable via `redis-cli`. Replace `<password>` with the actual credential before running.
 - **For Redis Enterprise**: emit just the rule body (the permission DSL). The customer applies it as an ACL Rule body in the admin UI or REST API. User authentication is separate. *(Generating the Enterprise REST API JSON payload is future work for this plugin.)*
 
 ### Enterprise's two-axis version model
