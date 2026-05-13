@@ -242,11 +242,11 @@ redis-cli -h localhost -p 6379 \
 
 - **Client library:** <name> (<source>)
 - **Target Redis edition:** OSS (asked)
-- **Target Redis version:** Redis <major> (user-confirmed) — **effective version for filtering: `<exact_version>`** (from `INFO SERVER` directly, OR assumed latest minor of the user's major if MCP was not connected; e.g., `Redis 7 (assumed minor 7.4)`)
+- **Target Redis version:** Redis <major> (user-confirmed) — **effective version for filtering: `<exact_version>`** (from `INFO SERVER` directly when MCP was connected, e.g., `8.6.3`; OR from the user's minor-version follow-up when MCP was not connected, e.g., `Redis 7.4`)
 - **Defense-in-depth denies:** <included | not included> (asked)
 - **Permission granularity:** <strict | balanced | favor brevity> (asked)
 - **Speculation candidate(s):** <left out | included> (asked) — if any flagged in discovery
-- **MCP status:** <connected — Redis version read from INFO SERVER as <exact> | not connected — version assumed as latest minor of user's major>
+- **MCP status:** <connected — Redis version read from INFO SERVER as <exact> | not connected — user-supplied minor version <X.Y> used>
 - **Mapping notes:** <from discovery>
 ````
 

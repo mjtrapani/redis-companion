@@ -63,25 +63,53 @@ Construct the question set as follows.
   - label: "Open Source (Redis OSS)" — description: "I'll emit a full `ACL SETUSER` command runnable via `redis-cli`."
   - label: "Enterprise (Redis Software / Cloud)" — description: "I'll emit just the rule body for the ACL Rule object (paste into admin UI or REST API)."
 
+**Rule for option ordering: the recommended / safest / most-common option ALWAYS goes first.** The Claude Code UI cursor defaults to the first option, so the default choice should be the one most users want.
+
 **Q2 — Target Redis major version:**
 
-If Phase 1's discovery summary included a version from `INFO SERVER` (e.g., `8.6.3`), present this as a CONFIRMATION:
+If Phase 1's discovery summary included a version from `INFO SERVER` (e.g., `8.6.3`), present this as a CONFIRMATION with the live-server version FIRST:
 - header: "Version"
 - question: "I see **Redis <X.Y.Z>** from `INFO SERVER`. Use Redis <X> as the target?"
 - options:
-  - label: "Yes, Redis <X>" — description: "Matches the live server (recommended)."
-  - label: "Redis 7" — description: "Override; generating rule for a different deployment."
-  - label: "Redis 6" — description: "Override; generating rule for a much older deployment."
+  - label: "Yes, Redis <X>" — description: "Matches the live server (recommended). Effective version <X.Y.Z>."
+  - label: "Redis <X-1>" — description: "Override; generating rule for a different deployment."
+  - label: "Redis <X-2>" — description: "Override; generating rule for a much older deployment."
 
-(Omit the "Yes, Redis <X>" option if `<X>` is already 6 or 7. Always include all options not already shown.)
+(Always order: confirm-live-version first, then descending. If MCP read 6.x or 7.x, only include the older option(s).)
 
-If MCP did NOT provide a version, present as an open question:
+If MCP did NOT provide a version, present as an open question. **Order: newest version FIRST** (Redis 8 = most-likely target for greenfield, most-features):
 - header: "Version"
 - question: "Which Redis major version is the target server?"
 - options:
-  - label: "Redis 8" — description: "Most recent. Standard categories include module commands (Search, JSON, TS, probabilistic)."
+  - label: "Redis 8" — description: "Most recent stable. Standard categories include module commands."
   - label: "Redis 7" — description: "@scripting is its own category; selectors and `%R~`/`%W~` available; pub/sub default-deny."
   - label: "Redis 6" — description: "@scripting lives inside @write; no selectors; pub/sub default permissive."
+
+**If MCP didn't provide a version AND the user picked a major, fire a SECOND `AskUserQuestion` for the minor version.** Order: latest minor of that major FIRST (recommended; matches what the upstream-derived map covers most precisely):
+
+If user picked **Redis 8**:
+- header: "Minor version"
+- question: "Which Redis 8 minor version is the target? (This affects which 8.x-added commands are eligible — e.g., `HSETEX` was added in 8.0, `MSETEX` in 8.4.)"
+- options:
+  - label: "Redis 8.6 (recommended — latest stable)" — description: "Effective version 8.6. All Redis 8 features and commands eligible."
+  - label: "Redis 8.4" — description: "Effective version 8.4. Commands added in 8.6 excluded."
+  - label: "Redis 8.2" — description: "Effective version 8.2. Commands added in 8.4+ excluded."
+  - label: "Redis 8.0" — description: "Effective version 8.0. Commands added in 8.2+ excluded."
+
+If user picked **Redis 7**:
+- header: "Minor version"
+- question: "Which Redis 7 minor version is the target?"
+- options:
+  - label: "Redis 7.4 (recommended — latest stable)" — description: "Effective version 7.4. Includes hash-field-TTL commands (HEXPIRE, HPEXPIRE, etc.)."
+  - label: "Redis 7.2" — description: "Effective version 7.2. Selectors available; HEXPIRE family excluded."
+  - label: "Redis 7.0" — description: "Effective version 7.0. No selectors-with-%R~/%W~; no HEXPIRE family."
+
+If user picked **Redis 6**:
+- header: "Minor version"
+- question: "Which Redis 6 minor version is the target?"
+- options:
+  - label: "Redis 6.2 (recommended — latest 6.x)" — description: "Effective version 6.2. Channel ACLs available; BITFIELD_RO added."
+  - label: "Redis 6.0" — description: "Effective version 6.0. No channel ACLs; minimal ACL feature set."
 
 **Q3 — Defense-in-depth denies:**
 - header: "Deny clauses"
@@ -90,35 +118,38 @@ If MCP did NOT provide a version, present as an open question:
   - label: "Yes (recommended)" — description: "Industry best practice for service accounts. Prevents accidental category-grant overreach (e.g., `+@write` would otherwise pull in `FLUSHDB`)."
   - label: "No" — description: "Only emit positive grants. Tighter rule body, but relies on you to remember the denies in your provisioning script."
 
-**Q4 — Permission granularity:**
+**Q4 — Permission granularity** (Balanced first — it's the recommended default):
 - header: "Granularity"
 - question: "Which permission granularity do you want?"
 - options:
-  - label: "Strict least-privilege" — description: "Grant only the specific commands your code uses. Never collapse to category, regardless of usage percentage."
   - label: "Balanced (recommended)" — description: "If >50% of a category's commands are used, ask whether to collapse. Else, individual grants."
+  - label: "Strict least-privilege" — description: "Grant only the specific commands your code uses. Never collapse to category, regardless of usage percentage."
   - label: "Favor brevity" — description: "Auto-collapse to `+@category` whenever >50% is used. Shorter rule, slightly broader access."
 
 **Q5 (conditional — only if Phase 1 surfaced speculation candidates):**
 
-For each speculation candidate in Phase 1's discovery summary, add a question. For example, a TODO at service.py:40 suggesting `SUBSCRIBE` is planned:
+For each speculation candidate, add a question. **Leave out first — it's the safer default.** For example, a TODO at service.py:40 suggesting `SUBSCRIBE` is planned:
 - header: "Speculation"
-- question: "I noticed a `# TODO: add a subscribe handler` at service.py:40, suggesting `SUBSCRIBE` may be added later. Include `+SUBSCRIBE` and `&notifications` channel grants now?"
+- question: "I noticed a `# TODO: add a subscribe handler` at service.py:40, suggesting `SUBSCRIBE` may be added later. Include the planned grants now or leave them out?"
 - options:
-  - label: "Include now" — description: "Grant `+SUBSCRIBE` and the `&notifications` channel for subscribe. Rule covers the planned addition without re-running."
   - label: "Leave out (recommended)" — description: "Stricter least-privilege. Re-run me when subscribe is actually wired up."
+  - label: "Include now" — description: "Grant `+SUBSCRIBE`. Rule covers the planned addition without re-running."
 
-Call `AskUserQuestion` with these questions. The `AskUserQuestion` platform limit is 4 questions per call — so when Q5 fires, split into two calls: first the 4 baseline questions, then Q5 separately. (One call when no speculation candidates were found.) Do not narrate before/after the calls — let the structured UI carry the interaction.
+**Calling `AskUserQuestion`:** the platform limit is 4 questions per call. Plan your calls:
+
+- **With MCP-provided version + speculation candidates:** Call 1 = Q1, Q2 (confirm), Q3, Q4 (4 questions). Call 2 = Q5 only.
+- **With MCP-provided version, no speculation:** Single call = Q1, Q2 (confirm), Q3, Q4.
+- **No MCP version + speculation candidates:** Call 1 = Q1, Q2 (major), Q3, Q4. Call 2 = minor-version follow-up for the user's Q2 major answer. Call 3 = Q5.
+- **No MCP version, no speculation:** Call 1 = Q1, Q2 (major), Q3, Q4. Call 2 = minor-version follow-up.
+
+Do not narrate before/after the calls — let the structured UI carry the interaction.
 
 ### Phase 3 — Synthesis (sub-agent)
 
 **Compute the effective target version before dispatching.** This is how minor-version filtering works:
 
 - **If Phase 1's discovery summary included a `redis_version` from `INFO SERVER` (e.g., `8.6.3`):** use that exact version. The agent will filter the category map by `Since: <= 8.6.3`, so commands like `HEXPIRE` (Since 7.4.0) are included only if 7.4.0 ≤ 8.6.3 — yes, included.
-- **If Phase 1 reported "MCP not connected" (no version pre-read):** the user's Q2 answer gives only a major version. Use the **latest known minor** of that major as the assumed cutoff:
-  - Redis 8 → `8.6` (matches the current upstream-derived map)
-  - Redis 7 → `7.4`
-  - Redis 6 → `6.2`
-  This is an assumption — note it in the Detected Context block.
+- **If Phase 1 reported "MCP not connected":** the user picked both major (Q2 major) and minor (the follow-up minor-version question). Combine into a precise version cutoff, e.g., "Redis 7.4" → effective version `7.4`. Filter by `Since: <= 7.4`. No assumption needed — the user told us.
 
 Spawn the `acl-generator` agent with this prompt:
 
