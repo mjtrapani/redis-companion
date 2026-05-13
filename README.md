@@ -124,16 +124,16 @@ flowchart TD
     subgraph P["redis-companion"]
         A[acl-generator agent]:::red
         A --> B[Load redis-acl-patterns skill]:::node
-        B --> C["Scan service directory · detect client library\ninventory commands · key patterns · channels · streams"]:::node
+        B --> C["Scan directory · detect client library\ncommands · key patterns · channels · streams"]:::node
         C --> D{MCP connected?}:::gate
-        D -->|Yes| E["INFO SERVER · ACL CAT · ACL LIST"]:::red
-        D -->|No| F[Skill reference data]:::node
-        E --> G["Ask: edition · version · granularity · defense-in-depth"]:::node
+        D -->|Yes| E["INFO SERVER · ACL CAT\nACL LIST · ACL GETUSER"]:::red
+        D -->|No| F[Baked skill reference]:::node
+        E --> G["Ask: edition · granularity · defense-in-depth"]:::node
         F --> G
-        G --> H["Synthesize rule · apply version deltas · collapse categories"]:::node
-        H --> I[Annotated output with per-term source citations]:::red
+        G --> H["Synthesize rule · version-aware\ncategory-collapse where >50%"]:::node
+        H --> I[Annotated rule output with per-term source citations]:::red
         I --> J{OSS + MCP?}:::gate
-        J -->|Yes| K["Safety-gated apply · ACL SETUSER → verify → validate"]:::red
+        J -->|Yes| K["Safety-gated apply\nACL SETUSER → verify → validate"]:::red
         J -->|No| L[Manual apply instructions]:::node
     end
 
