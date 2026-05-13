@@ -24,7 +24,11 @@ Then stop. Do not proceed without a path.
 
 ## If `$ARGUMENTS` contains a path — the three-phase orchestration
 
-You will run this analysis in **three phases**: discovery (sub-agent), batched ask (`AskUserQuestion`), and synthesis (sub-agent). Do not deviate from the order. Do not skip phases. Do not attempt the analysis yourself outside these phase boundaries.
+**First, emit a brief greeting to the user (exactly one short line — no headers, no bullets):**
+
+> 👋 Hi! I'm **redis-companion**. Scanning `$ARGUMENTS` for Redis usage — I'll ask you a few questions, then emit a least-privilege ACL rule with per-term annotations.
+
+Then proceed to the three phases below — discovery (sub-agent), batched ask (`AskUserQuestion`), and synthesis (sub-agent). Do not deviate from the order. Do not skip phases. Do not attempt the analysis yourself outside these phase boundaries.
 
 Why this structure exists: Claude Code sub-agents run single-shot — they can't pause mid-response to ask the user a question. So the interactive step lives in the skill (here, in the main conversation), via `AskUserQuestion`, between two stateless sub-agent dispatches. Read `.spec/EXPECTED_BEHAVIOR.md` if it's available to you for the full test oracle.
 
@@ -65,17 +69,16 @@ Construct the question set as follows.
 
 **Rule for option ordering: the recommended / safest / most-common option ALWAYS goes first.** The Claude Code UI cursor defaults to the first option, so the default choice should be the one most users want.
 
-**Q2 — Target Redis major version:**
+**Q2 — Target Redis version:**
 
-If Phase 1's discovery summary included a version from `INFO SERVER` (e.g., `8.6.3`), present this as a CONFIRMATION with the live-server version FIRST:
+If Phase 1's discovery summary included a version from `INFO SERVER` (e.g., `8.6.3`), present this as a CONFIRM-OR-OVERRIDE:
 - header: "Version"
-- question: "I see **Redis <X.Y.Z>** from `INFO SERVER`. Use Redis <X> as the target?"
+- question: "I detected **Redis <X.Y.Z>** from `INFO SERVER`. Use this version, or generate the rule for a different version?"
 - options:
-  - label: "Yes, Redis <X>" — description: "Matches the live server (recommended). Effective version <X.Y.Z>."
-  - label: "Redis <X-1>" — description: "Override; generating rule for a different deployment."
-  - label: "Redis <X-2>" — description: "Override; generating rule for a much older deployment."
+  - label: "Yes, use Redis <X.Y.Z> (recommended — matches the live server)" — description: "Effective version <X.Y.Z>. The category map filters by `Since: <= <X.Y.Z>`."
+  - label: "Override — I want to specify a different version" — description: "I'll ask you for the major and minor version next (useful if you're generating a rule for a different deployment than the one this MCP is connected to)."
 
-(Always order: confirm-live-version first, then descending. If MCP read 6.x or 7.x, only include the older option(s).)
+If the user picks "Override", treat this as if MCP did not provide a version: fire the major-version question, then the minor-version follow-up. Continue with Q3 / Q4 after.
 
 If MCP did NOT provide a version, present as an open question. **Order: newest version FIRST** (Redis 8 = most-likely target for greenfield, most-features):
 - header: "Version"
@@ -137,10 +140,9 @@ For each speculation candidate, add a question. **Leave out first — it's the s
 
 **Calling `AskUserQuestion`:** the platform limit is 4 questions per call. Plan your calls:
 
-- **With MCP-provided version + speculation candidates:** Call 1 = Q1, Q2 (confirm), Q3, Q4 (4 questions). Call 2 = Q5 only.
-- **With MCP-provided version, no speculation:** Single call = Q1, Q2 (confirm), Q3, Q4.
-- **No MCP version + speculation candidates:** Call 1 = Q1, Q2 (major), Q3, Q4. Call 2 = minor-version follow-up for the user's Q2 major answer. Call 3 = Q5.
-- **No MCP version, no speculation:** Call 1 = Q1, Q2 (major), Q3, Q4. Call 2 = minor-version follow-up.
+- **MCP-provided version, user confirms (most common):** Single call = Q1, Q2 (confirm-or-override), Q3, Q4. If speculation candidates were found, fire a follow-up call with Q5. Done — no minor follow-up needed because the user accepted the MCP-detected exact version.
+- **MCP-provided version, user picks "Override":** First call already included Q1–Q4. After processing the override, fire follow-up call(s) for the major version, the minor version, and (if applicable) Q5. Treat exactly like the no-MCP path from this point.
+- **No MCP version (MCP not connected):** Call 1 = Q1, Q2 (major), Q3, Q4. Call 2 = minor-version follow-up for the user's Q2 major answer. Call 3 = Q5 (only if speculation candidates were found).
 
 Do not narrate before/after the calls — let the structured UI carry the interaction.
 
