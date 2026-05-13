@@ -80,7 +80,15 @@ The skill's `client-library-patterns.md` documents method-to-command mappings ba
 - **Sentinel / Cluster client mode** (`redis.sentinel.Sentinel`, `new Redis.Cluster([...])`, `redis.NewClusterClient`): implicit `SENTINEL *` / `CLUSTER *` commands at the infrastructure layer. These are typically `@admin` — should NOT be granted to application users.
 - **Sharded pub/sub** on Redis Cluster: may issue `SSUBSCRIBE`/`SUNSUBSCRIBE`/`SPUBLISH` alongside the standard pub/sub commands. Grant `+@pubsub` (covers both).
 
-For absolute certainty on any flagged call, recommend the user run `MONITOR` against a test instance while executing the code path. v1 doesn't automate this; surface it as a suggestion in the output.
+Before flagging a call as uncertain, make **one** WebFetch to the library's official API reference to look up the underlying Redis command(s):
+
+- **redis-py**: `https://redis-py.readthedocs.io/en/stable/commands.html`
+- **ioredis**: `https://luin.github.io/ioredis/classes/Redis.html`
+- **go-redis**: `https://pkg.go.dev/github.com/redis/go-redis/v9`
+
+If the page clearly answers what Redis command(s) the method emits, use that answer and note the source in your output. If the result is ambiguous, the method isn't found, or the page fails to load — stop, do not follow links or retry, and fall back to flagging it as uncertain.
+
+For absolute certainty on any flagged call, recommend the user run `MONITOR` against a test instance while executing the code path. Surface it as a suggestion in the output.
 
 ### 2h. (Optional) Pre-ask INFO probe — only if Redis MCP is connected
 
