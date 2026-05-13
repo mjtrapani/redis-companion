@@ -118,30 +118,35 @@ flowchart TD
     classDef node   fill:#1c2b3a,stroke:#334155,color:#e2e8f0
     classDef gate   fill:#0d1520,stroke:#334155,color:#cbd5e1
 
-    U([User]):::entry -->|"analyze path · conversational"| A
+    U([User]):::entry -->|"/redis-companion:analyze path"| S
 
     subgraph P["redis-companion"]
-        A[acl-generator agent]:::red
-        A --> B[Load redis-acl-patterns skill]:::node
-        B --> C["Scan directory · detect client library\ncommands · key patterns · channels · streams"]:::node
-        C --> D{MCP connected?}:::gate
-        D -->|Yes| E["INFO SERVER → version"]:::red
-        D -->|No| F[Baked skill reference]:::node
-        E --> G["Ask: edition · version (no MCP) · granularity · defense-in-depth"]:::node
-        F --> G
-        G --> H["Synthesize rule · version-aware\ncategory-collapse where >50%"]:::node
-        H --> I[Annotated rule output with per-term source citations]:::red
-        I --> L["Manual apply instructions\nredis-cli ACL SETUSER"]:::node
+        S[analyze skill orchestrator]:::red
+        S -->|"Phase 1: dispatch DISCOVERY"| A1[acl-generator agent · DISCOVERY mode]:::red
+        A1 --> SCAN["Scan directory · detect client library\ncommands · key patterns · channels · streams\nINFO SERVER for version (MCP)"]:::node
+        SCAN -->|"discovery summary returned"| S
+        S -->|"Phase 2"| ASK[AskUserQuestion · interactive pause]:::red
+        ASK -->|"edition · version (confirm or ask) ·\ndefense-in-depth · granularity ·\nspeculation candidates (Q5)"| USER([User answers]):::entry
+        USER --> S
+        S -->|"Phase 3: dispatch SYNTHESIS\nwith discovery + answers"| A2[acl-generator agent · SYNTHESIS mode]:::red
+        A2 --> SYNTH["Version-aware category mapping\nfrom upstream-derived map · compose rule\nper-term annotations · apply instructions"]:::node
+        SYNTH -->|"final rule"| S
     end
 
-    I --> U
+    S --> U
 ```
 
-The plugin is four cooperating components, each doing one job:
+The plugin is five cooperating components, each doing one job. The `analyze` skill orchestrates a three-phase flow: it dispatches the agent for **discovery**, pauses for **user input** via `AskUserQuestion`, then dispatches the agent again for **synthesis**. This pattern exists because Claude Code sub-agents run single-shot — they can't pause mid-execution to ask the user a question. So the interactive step lives in the inline skill, between two stateless agent dispatches.
 
-### Skill: `redis-acl-patterns`
+### Skill: `analyze` (orchestrator)
 
-Knowledge base, in `skills/redis-acl-patterns/`. Loads automatically when conversation touches Redis client code or ACL syntax. Contains the ACL DSL primer, the OSS vs Enterprise fork map, and pointers to four detailed references that load on demand:
+In `skills/analyze/`. Triggered by `/redis-companion:analyze <path>` or by natural-language requests. Runs inline in the main conversation. Owns the interactive contract: it dispatches the `acl-generator` agent in `DISCOVERY` mode, parses the structured findings, calls `AskUserQuestion` with the four baseline questions plus any conditional questions surfaced from discovery (speculation candidates, multi-language detection), then dispatches the agent again in `SYNTHESIS` mode with the user's answers baked in.
+
+`AskUserQuestion` is the load-bearing primitive — it's the only Claude Code mechanism that actually pauses the conversation for structured user input. Natural-language "wait for the user" instructions don't enforce a pause, which is why earlier versions of this plugin had the agent skipping questions and silently picking defaults.
+
+### Skill: `redis-acl-patterns` (knowledge base)
+
+In `skills/redis-acl-patterns/`. Loads automatically when conversation touches Redis client code or ACL syntax. Contains the ACL DSL primer, the OSS vs Enterprise fork map, and pointers to four detailed references that load on demand:
 
 - `command-category-map.md` — categories → commands for the >50% category-collapse rule. **Generated from upstream `redis/redis@8.6.3` command JSONs** via `scripts/build-category-map.py` — every entry is verifiable against the official Redis source. Each command annotated with its `Since:` version so the agent can filter for older targets.
 - `version-deltas.md` — Redis 6 / 7 / 8 changes (scripting split, selectors, module-category expansion)
@@ -150,9 +155,9 @@ Knowledge base, in `skills/redis-acl-patterns/`. Loads automatically when conver
 
 ### Agent: `acl-generator`
 
-Task executor, in `agents/acl-generator.md`. Read-only filesystem access (Write/Edit/MultiEdit/Bash are disallowed — only Read, Grep, and Glob for code discovery). Inherits MCP tools from the session when the Redis MCP is connected. Process: load knowledge → discover from code → ask the user (batched, must stop and wait for answers) → optional version probe via INFO SERVER (MCP only) → synthesize the rule → emit annotated output with `redis-cli` apply instructions.
+Task executor, in `agents/acl-generator.md`. Operates in two modes — `DISCOVERY` (scan codebase, return structured findings, no questions, no synthesis) and `SYNTHESIS` (take findings + user answers, produce annotated rule). Read-only filesystem access; `Write`, `Edit`, `MultiEdit`, and `Bash` are disallowed in the agent frontmatter, leaving only `Read`, `Grep`, and `Glob` plus the Redis MCP `info` tool for code discovery and version detection.
 
-When a client library method isn't in the skill's reference, the agent makes one targeted WebFetch to the library's official API docs before flagging it as uncertain. Hard fallback on ambiguity or fetch failure — no link-following, no retries.
+When a client library method isn't in the skill's reference, the agent makes one targeted `WebFetch` to the library's official API docs before flagging it as uncertain. Hard fallback on ambiguity or fetch failure — no link-following, no retries.
 
 ### Hook: `credential-guard`
 
