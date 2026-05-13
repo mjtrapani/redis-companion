@@ -184,7 +184,13 @@ Spawn the `acl-generator` agent with this prompt:
 >
 > Forbidden tools: any tool that reads or writes data; this phase is text-only synthesis from the inputs above.
 
-Surface the agent's final output to the user as-is.
+### After Phase 3 returns — re-emit the output (CRITICAL UX step)
+
+The Task tool's return value is rendered as a **collapsed** sub-agent transcript in the user's UI. The user has to press a key combination (e.g., `Ctrl+O` in Claude Code) to expand and read it — easy to miss, and a poor demo experience.
+
+**You must re-emit the agent's full synthesis output as your own user-facing message**, copying the agent's response verbatim. Do not just rely on the Task tool's return being visible. Do not summarize, paraphrase, or wrap it in your own commentary above or below the output unless the user explicitly asks for one.
+
+Concretely: after the agent returns, your next message to the user should begin directly with the rule output (e.g., `# ACL Rule for <username> ...` or whatever heading the agent produced) and contain the full synthesis content. The agent's output is the deliverable — surface it cleanly.
 
 ---
 
@@ -194,3 +200,4 @@ Surface the agent's final output to the user as-is.
 - **Never bake speculation candidates into the rule** without asking Q5.
 - **Never claim live apply works.** Output must reflect that apply is manual via `redis-cli`.
 - **Don't dump the Phase 1 summary to the user verbatim.** The user sees the questions (Phase 2) and the final rule (Phase 3). Discovery is internal context.
+- **Always re-emit the Phase 3 output** — see the "After Phase 3 returns" section above. The Task tool's return is collapsed in the user's UI by default.

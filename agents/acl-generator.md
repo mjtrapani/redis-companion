@@ -226,16 +226,36 @@ Replace `><changeme>` with your actual credential choice:
 
 ## How to apply
 
+**Shell-safety note:** ACL rule terms contain characters that are special in bash/zsh — `>` (redirect), `~` (home expansion), `*` (glob), `&` (background). Each problematic token below is **single-quoted** so the shell passes it through verbatim. Commands are emitted **single-line** (no `\` continuation) for reliable copy-paste in any terminal (Warp, iTerm, etc.).
+
 For non-local Redis with a real password:
 ```bash
-redis-cli -h <host> -p <port> --user <admin-user> --pass <admin-password> \
-  "ACL SETUSER <username> on >YOUR_PASSWORD <rest of rule>"
+redis-cli -h <host> -p <port> --user <admin-user> --askpass ACL SETUSER <username> on '>YOUR_STRONG_PASSWORD' resetkeys '~<key1>' '~<key2>' resetchannels '&<chan>' nocommands +<cmd1> +<cmd2> '-@admin' '-@dangerous'
 ```
 
-For local-dev Redis with no auth:
+(`--askpass` makes redis-cli prompt for the admin password — avoids putting it in shell history. Replace `'>YOUR_STRONG_PASSWORD'` with your actual generated password, keeping the quotes and the `>` prefix.)
+
+For local-dev Redis on the MCP-connected target (no auth required):
 ```bash
-redis-cli -h localhost -p 6379 \
-  "ACL SETUSER <username> on nopass <rest of rule>"
+redis-cli ACL SETUSER <username> on nopass resetkeys '~<key1>' '~<key2>' resetchannels '&<chan>' nocommands +<cmd1> +<cmd2> '-@admin' '-@dangerous'
+```
+
+(`redis-cli` defaults to `127.0.0.1:6379` — no `-h`/`-p` needed for the localhost case. If the connected Redis is elsewhere, add `-h <host> -p <port>`. Use the host/port reported in the Detected Context block below.)
+
+### Verify the rule applied correctly
+
+```bash
+redis-cli ACL GETUSER <username>
+```
+
+### Sanity-check (replace `<username>` and password if applicable):
+
+```bash
+# Should succeed (in-scope SET):
+redis-cli --user <username> --pass '<password>' SET '<one-of-your-key-patterns>' '{"test":1}'
+
+# Should fail with NOPERM (out-of-scope):
+redis-cli --user <username> --pass '<password>' FLUSHDB
 ```
 
 ## Detected context
