@@ -82,15 +82,11 @@ The skill's `client-library-patterns.md` documents method-to-command mappings ba
 
 For absolute certainty on any flagged call, recommend the user run `MONITOR` against a test instance while executing the code path. v1 doesn't automate this; surface it as a suggestion in the output.
 
-### 2h. (Optional) Pre-ask edition probe — only if Redis MCP is connected
+### 2h. (Optional) Pre-ask INFO probe — only if Redis MCP is connected
 
-If MCP tools are available, run `INFO SERVER` before asking the user. Parse the response for these signals:
+If MCP tools are available, run `INFO SERVER` before asking the user. Use it to inform the **version** question (step 3, question 2) — `redis_version` gives the server version, which the user may not know off the top of their head.
 
-- `redis_mode: cluster` → strong Enterprise indicator
-- "Redis Enterprise", "Redis Software", or "rlec" in `redis_version` or `redis_build_id` → definitive Enterprise indicator
-- Standard semver only (e.g. `redis_version: 7.0.5`) with no Enterprise strings → OSS indicator
-
-Store the result in `detected_edition` (one of: `oss`, `enterprise`, `unclear`). You will use this in step 3 to pre-fill or confirm the edition question rather than asking blindly.
+Do **not** use INFO output to infer edition. Redis Cloud sanitizes INFO: `redis_build_id` is all zeros, `redis_mode` shows `standalone`, and no Enterprise strings appear — even on paid Enterprise tiers. The only reliable signal would be "Redis Enterprise" / "rlec" in `redis_build_id` for some self-managed Redis Software deployments, but this is absent on Redis Cloud. Always ask the user for edition explicitly (step 3, question 1).
 
 ### 3. Ask the user (batched, before synthesis)
 
@@ -100,10 +96,8 @@ After discovery, ask these questions **in a single batched prompt**. Do not synt
 Before I synthesize the rule, four questions (plus follow-ups based on what I found):
 
 1. **Target Redis edition**: Open Source (Redis OSS) or Enterprise (Redis Software / Redis Cloud)?
-   - This determines output shape — OSS gets a full `ACL SETUSER` command; Enterprise / Redis Cloud gets just the rule body (you'll paste it into an ACL Rule via the admin UI or REST API).
-   - [IF detected_edition == "enterprise"]: INFO SERVER reports redis_mode: cluster / Redis Enterprise build strings — this looks like Redis Enterprise. Can you confirm?
-   - [IF detected_edition == "oss"]: INFO SERVER shows a standard Redis build — this looks like Redis OSS. Can you confirm?
-   - [IF detected_edition == "unclear" OR no MCP]: Please specify — I can't determine this without your input.
+   - This determines output shape — OSS gets a full `ACL SETUSER` command; Enterprise / Redis Cloud gets just the rule body (paste it into an ACL Rule via the admin UI or REST API).
+   - I can't determine this from the server — Redis Cloud sanitizes INFO output and self-managed Redis Enterprise may or may not expose identifying build strings. You must specify.
 
 2. **Target Redis major version** (6, 7, or 8)?
    - Different versions have different command categories. Redis 7 split `@scripting` out of `@write`; Redis 8 expanded `@read`/`@write` to include module commands (Search, JSON, TS, probabilistic).

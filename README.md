@@ -166,7 +166,7 @@ Declared in `plugin.json`, wires the Redis MCP server (`redis/mcp-redis`) using 
 
 The agent **always asks** for the target Redis **major version** (6 / 7 / 8) — package files reveal client library version, not server version.
 
-For the target **edition** (OSS vs Enterprise): without an MCP connection the agent always asks, since there's no way to inspect the server. With MCP, `INFO SERVER` surfaces strong signals — `redis_mode: cluster` and "Redis Enterprise" in the version/build strings are definitive on most deployments — but the agent still confirms rather than silently assuming, since field values can vary by deployment.
+For the target **edition** (OSS vs Enterprise / Redis Cloud): the agent always asks. `INFO SERVER` is not a reliable signal — Redis Cloud sanitizes its output (`redis_build_id` is all zeros, `redis_mode` shows `standalone`) even on paid Enterprise tiers, and self-managed Redis Enterprise deployments vary. With MCP connected, `INFO SERVER` is used to surface the server **version** (which the user may not know off-hand), but never to infer edition.
 
 The agent **flags but doesn't silently bake** these:
 
