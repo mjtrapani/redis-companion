@@ -2,7 +2,7 @@
 
 What changed across major Redis versions that affects ACL rule generation. Knowing these lets you generate rules that *actually work* on the target — what's valid in Redis 7 may not parse in Redis 6, and what's needed in Redis 8 may not have existed earlier.
 
-> ⚠️ For the target server's actual feature surface, `ACL CAT` (and `INFO server` for `redis_version`) are authoritative. This document is the offline reference.
+> ⚠️ For the target server's actual feature surface, `INFO SERVER` gives the version (and is exposed by `redis/mcp-redis`); live `ACL CAT` via `redis-cli` is most authoritative for category surface but is not exposed by the MCP today.
 
 ---
 

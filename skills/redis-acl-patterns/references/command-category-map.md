@@ -2,7 +2,7 @@
 
 Reference mapping of Redis commands to ACL categories. Structured **category → commands** so the >50% category-collapse rule is a direct count.
 
-> ⚠️ **`ACL CAT @<category>` against the live server is the authoritative source** — it reflects the target's actual Redis version *and* loaded modules. This document is a fallback for degraded mode (no MCP connection) and a sanity check. When falling back to this map, surface a *"version drift possible — connect MCP for live verification"* note.
+> ⚠️ **`ACL CAT @<category>` against the live server is the most authoritative possible source** — it reflects the target's actual Redis version *and* loaded modules. **However**, the official `redis/mcp-redis` server does not expose ACL commands today, so this map is the agent's *primary* source. Run `ACL CAT` manually via `redis-cli` if you need to verify against a specific Redis version, especially Redis 8 or any deployment with modules loaded.
 
 Counts and lists are accurate for **Redis 7.x core** (no modules loaded) unless otherwise noted. See `version-deltas.md` for what changes across Redis 6 / 7 / 8.
 
@@ -69,9 +69,11 @@ String data-type operations.
 
 Hash data-type operations.
 
-**Commands (Redis 7.x, ~17):**
+**Commands (Redis 7.x, ~16; Redis 7.4+ adds 9 hash-field-TTL commands):**
 
-`HSET`, `HGET`, `HMSET`, `HMGET`, `HSETNX`, `HEXISTS`, `HDEL`, `HLEN`, `HSTRLEN`, `HKEYS`, `HVALS`, `HGETALL`, `HRANDFIELD`, `HINCRBY`, `HINCRBYFLOAT`, `HSCAN`, `HEXPIRE` (7.4+), `HPERSIST` (7.4+), `HTTL` (7.4+)
+`HSET`, `HGET`, `HMSET`, `HMGET`, `HSETNX`, `HEXISTS`, `HDEL`, `HLEN`, `HSTRLEN`, `HKEYS`, `HVALS`, `HGETALL`, `HRANDFIELD`, `HINCRBY`, `HINCRBYFLOAT`, `HSCAN`
+
+Redis 7.4+ also adds: `HEXPIRE`, `HEXPIREAT`, `HPEXPIRE`, `HPEXPIREAT`, `HEXPIRETIME`, `HPEXPIRETIME`, `HTTL`, `HPTTL`, `HPERSIST`.
 
 ### `@list`
 
@@ -173,7 +175,7 @@ Server administration. **Almost never granted to application users.**
 
 **Commands (Redis 7.x, ~25):**
 
-`REPLICAOF`, `SLAVEOF`, `CONFIG`, `DEBUG`, `SHUTDOWN`, `MONITOR`, `SAVE`, `BGSAVE`, `BGREWRITEAOF`, `ACL`, `COMMAND`, `CLUSTER`, `FAILOVER`, `LATENCY`, `MODULE`, `SLOWLOG`, `MEMORY`, `LASTSAVE`, `ROLE`, `SWAPDB`, `RESET`, `REPLICATE`, `PSYNC`, `REPLCONF`, `SYNC`
+`REPLICAOF`, `SLAVEOF`, `CONFIG`, `DEBUG`, `SHUTDOWN`, `MONITOR`, `SAVE`, `BGSAVE`, `BGREWRITEAOF`, `ACL`, `COMMAND`, `CLUSTER`, `FAILOVER`, `LATENCY`, `MODULE`, `SLOWLOG`, `MEMORY`, `LASTSAVE`, `ROLE`, `SWAPDB`, `RESET`, `PSYNC`, `REPLCONF`, `SYNC`
 
 ### `@dangerous`
 
@@ -181,7 +183,7 @@ Commands with high blast radius. Frequently denied via `-@dangerous` even when g
 
 **Commands (Redis 7.x, ~30 — many overlap with `@admin`):**
 
-`KEYS`, `FLUSHDB`, `FLUSHALL`, `MIGRATE`, `MOVE`, `RESTORE`, `DEBUG`, `MONITOR`, `CLIENT KILL`, `CLIENT PAUSE`, `CLIENT UNPAUSE`, `CLUSTER`, `CONFIG`, `DBSIZE`, `FAILOVER`, `LASTSAVE`, `LATENCY`, `MEMORY`, `MODULE`, `OBJECT`, `PSYNC`, `REPLCONF`, `REPLICAOF`, `SLAVEOF`, `RESET`, `SAVE`, `BGSAVE`, `BGREWRITEAOF`, `SHUTDOWN`, `SLOWLOG`, `SWAPDB`, `SYNC`, `WAIT`, `WAITAOF`, `WAITAOF`, `ACL` (overlap with @admin)
+`KEYS`, `FLUSHDB`, `FLUSHALL`, `MIGRATE`, `MOVE`, `RESTORE`, `DEBUG`, `MONITOR`, `CLIENT KILL`, `CLIENT PAUSE`, `CLIENT UNPAUSE`, `CLUSTER`, `CONFIG`, `DBSIZE`, `FAILOVER`, `LASTSAVE`, `LATENCY`, `MEMORY`, `MODULE`, `OBJECT`, `PSYNC`, `REPLCONF`, `REPLICAOF`, `SLAVEOF`, `RESET`, `SAVE`, `BGSAVE`, `BGREWRITEAOF`, `SHUTDOWN`, `SLOWLOG`, `SWAPDB`, `SYNC`, `ACL` (overlap with @admin)
 
 ### `@blocking`
 
@@ -255,7 +257,7 @@ RedisGraph reached end-of-life in early 2024. If a deployment still loads it, co
 
 When deciding whether to collapse `+CMD1 +CMD2 +CMD3` to `+@category`:
 
-1. **Count what's in the category live**: prefer `ACL CAT @<category>` over this map.
+1. **Count what's in the category**: use this map's lists, adjusted for the target Redis version per `version-deltas.md`. (Live `ACL CAT @<category>` via `redis-cli` is more authoritative if the user has shell access to verify.)
 2. **Count what the service uses** in that category (from the discovery phase).
 3. **If used / total > 50%**: this is a collapse opportunity → ask the user (per `acl-generator` step 3).
 4. **Else**: emit individual command grants.
@@ -266,4 +268,4 @@ Some commands appear in **multiple categories** (e.g., `XADD` is in both `@write
 
 ## When this map is wrong, fix it
 
-This document is approximate. If a deployment's live `ACL CAT @<category>` differs materially from what's here — especially on Redis 8 or with modules loaded — trust the live answer. The map exists for offline reasoning when MCP isn't available.
+This document is approximate. If a deployment's live `ACL CAT @<category>` (run via `redis-cli`) differs materially from what's here — especially on Redis 8 or with modules loaded — trust the live answer and update this map. Live ACL inspection via the official `redis/mcp-redis` MCP server is not currently supported (see SUBMISSION_NOTE.md item #1).
