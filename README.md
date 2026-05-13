@@ -81,11 +81,12 @@ scope a Redis ACL for examples/sample-service
 
 ## Optional: connect a Redis MCP for live validation and apply
 
-The plugin works fully without an MCP connection. With one, you get three additional capabilities:
+The plugin works fully without an MCP connection. With one, you get four additional capabilities:
 
-1. **Live category verification** via `ACL CAT @<category>` — more accurate than the baked command-category reference, especially on Redis 8 or with modules loaded.
-2. **Existing-user inspection** via `ACL LIST` / `ACL GETUSER` — avoid naming collisions and learn from existing rule shapes.
-3. **Safety-gated apply (OSS only)** — agent applies the rule via `ACL SETUSER` after you type `yes`, verifies with `ACL GETUSER`, and validates by impersonation (in-scope commands succeed, out-of-scope are blocked).
+1. **Exact server version** via `INFO SERVER` — the agent reads the Redis version directly instead of asking you to specify it. Edition (OSS vs Enterprise / Redis Cloud) is still always asked; `INFO SERVER` doesn't reliably distinguish them.
+2. **Live category verification** via `ACL CAT @<category>` — more accurate than the baked command-category reference, especially on Redis 8 or with modules loaded.
+3. **Existing-user inspection** via `ACL LIST` / `ACL GETUSER` — avoid naming collisions and learn from existing rule shapes.
+4. **Safety-gated apply (OSS only)** — agent applies the rule via `ACL SETUSER` after you type `yes`, verifies with `ACL GETUSER`, and validates by impersonation (in-scope commands succeed, out-of-scope are blocked).
 
 ### Setup
 
@@ -164,7 +165,7 @@ Declared in `plugin.json`, wires the Redis MCP server (`redis/mcp-redis`) using 
 
 ## Limitations
 
-The agent **always asks** for the target Redis **major version** (6 / 7 / 8) — package files reveal client library version, not server version.
+Without MCP, the agent always asks for the target Redis **major version** (6 / 7 / 8) — package files reveal client library version, not server version. With MCP, `INFO SERVER` provides the exact version, which the agent surfaces for confirmation rather than asking blindly.
 
 For the target **edition** (OSS vs Enterprise / Redis Cloud): the agent always asks. `INFO SERVER` is not a reliable signal — Redis Cloud sanitizes its output (`redis_build_id` is all zeros, `redis_mode` shows `standalone`) even on paid Enterprise tiers, and self-managed Redis Enterprise deployments vary. With MCP connected, `INFO SERVER` is used to surface the server **version** (which the user may not know off-hand), but never to infer edition.
 
