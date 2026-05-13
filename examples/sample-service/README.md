@@ -21,7 +21,7 @@ this directory and it will:
 1. Detect `redis-py` from the import
 2. Infer the key patterns (`cache:user:*`, `session:*`) and pubsub/stream names
 3. Map the call sites to the minimum command set + categories needed (`@read`, `@write`, `@pubsub`, `@stream`)
-4. Emit a tailored Redis ACL rule (the deployment-agnostic permission DSL) with per-clause annotations
+4. Emit a tailored Redis ACL rule (the deployment-agnostic permission DSL) with per-term annotations
 5. Note how to apply the rule in Redis OSS / Cloud (`ACL SETUSER`) vs Redis Enterprise (ACL Rule object via REST API or admin UI)
 6. Optionally validate the rule against a live Redis if a Redis MCP server is connected
 
@@ -33,7 +33,7 @@ From the plugin root, open Claude Code and run:
 /redis-companion:acl-generator examples/sample-service/
 ```
 
-You should see a generated `ACL SETUSER` block followed by a per-clause explanation.
+You should see a generated `ACL SETUSER` block followed by a per-term explanation.
 
 ## Run it (optional)
 

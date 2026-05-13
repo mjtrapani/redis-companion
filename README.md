@@ -1,6 +1,6 @@
 # redis-companion
 
-A Claude Code plugin that reads your service's code and generates a least-privilege Redis ACL rule — version-aware, with per-clause annotations, and (optionally) provisioned and validated against a live Redis.
+A Claude Code plugin that reads your service's code and generates a least-privilege Redis ACL rule — version-aware, with per-term annotations, and (optionally) provisioned and validated against a live Redis.
 
 ---
 
@@ -69,7 +69,7 @@ The agent will:
 ACL SETUSER my-service-user on ><password> ~cache:user:* ~session:* ~activity:events &notifications +GET +MGET +SET +SETEX +PUBLISH +XADD
 ```
 
-…with a per-clause annotation table citing the source lines that justified each grant, plus instructions on how to apply (`ACL SETUSER` for OSS, "paste into an ACL Rule body" for Enterprise).
+…with a per-term annotation table citing the source lines that justified each grant, plus instructions on how to apply (`ACL SETUSER` for OSS, "paste into an ACL Rule body" for Enterprise).
 
 You can also invoke conversationally:
 
@@ -131,7 +131,7 @@ flowchart TD
         E --> G["Ask: edition · version · granularity · defense-in-depth"]:::node
         F --> G
         G --> H["Synthesize rule · apply version deltas · collapse categories"]:::node
-        H --> I[Annotated output with per-clause source citations]:::red
+        H --> I[Annotated output with per-term source citations]:::red
         I --> J{OSS + MCP?}:::gate
         J -->|Yes| K["Safety-gated apply · ACL SETUSER → verify → validate"]:::red
         J -->|No| L[Manual apply instructions]:::node

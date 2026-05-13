@@ -140,7 +140,7 @@ If the user wants to **generate a complete Redis ACL rule for a specific service
 
 - Scans the target codebase for Redis usage
 - Asks the user for edition (OSS vs Enterprise), version, and defense-in-depth preference
-- Synthesizes a least-privilege rule with per-clause annotations
+- Synthesizes a least-privilege rule with per-term annotations
 - (Optional, OSS + Redis MCP connected) Applies the rule after a safety gate, verifies via `ACL GETUSER`, validates by impersonation
 
 Invocation paths:

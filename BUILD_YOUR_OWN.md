@@ -6,7 +6,7 @@ A guide for engineers who like the *shape* of `redis-companion` and want to appl
 
 ## What you're building
 
-A Claude Code plugin that reads code in your repo and emits a piece of configuration — a permission policy, a deployment spec, a generated client, an API contract — with per-clause annotations explaining *why* each part is there. The value isn't the artifact; it's that the agent reads your code and can explain the output back to you in your terms.
+A Claude Code plugin that reads code in your repo and emits a piece of configuration — a permission policy, a deployment spec, a generated client, an API contract — with per-term annotations explaining *why* each part is there. The value isn't the artifact; it's that the agent reads your code and can explain the output back to you in your terms.
 
 ## The shape that worked here
 
