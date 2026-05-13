@@ -66,7 +66,7 @@ The agent will:
 5. Emit something like:
 
 ```
-ACL SETUSER my-service-user on ><replace_password_here> ~cache:user:* ~session:* ~activity:events &notifications +GET +MGET +SET +SETEX +PUBLISH +XADD
+ACL SETUSER my-service-user on ><changeme> ~cache:user:* ~session:* ~activity:events &notifications +GET +MGET +SET +SETEX +PUBLISH +XADD
 ```
 
 …with a per-term annotation table citing the source lines that justified each grant, plus instructions on how to apply (`ACL SETUSER` for OSS, "paste into an ACL Rule body" for Enterprise).
@@ -81,12 +81,11 @@ scope a Redis ACL for examples/sample-service
 
 ## Optional: connect a Redis MCP for live validation and apply
 
-The plugin works fully without an MCP connection. With one, you get four additional capabilities:
+The plugin works fully without an MCP connection. With one, you get one additional capability today, with more planned:
 
 1. **Exact server version** via `INFO SERVER` — the agent reads the Redis version directly instead of asking you to specify it. Edition (OSS vs Enterprise / Redis Cloud) is still always asked; `INFO SERVER` doesn't reliably distinguish them.
-2. **Live category verification** via `ACL CAT @<category>` — more accurate than the baked command-category reference, especially on Redis 8 or with modules loaded.
-3. **Existing-user inspection** via `ACL LIST` / `ACL GETUSER` — avoid naming collisions and learn from existing rule shapes.
-4. **Safety-gated apply (OSS only)** — agent applies the rule via `ACL SETUSER` after you type `yes`, verifies with `ACL GETUSER`, and validates by impersonation (in-scope commands succeed, out-of-scope are blocked).
+
+> **Note:** The `redis/mcp-redis` server exposes data-plane operations only — it does not expose ACL commands (`ACL CAT`, `ACL LIST`, `ACL GETUSER`, `ACL SETUSER`). Live category verification and safety-gated apply are on the roadmap pending a Redis MCP server with ACL support.
 
 ### Setup
 

@@ -1,6 +1,6 @@
 ---
 name: acl-generator
-description: Use when the user asks to generate, build, scope, infer, review, or apply a Redis ACL for a backend service. Scans the codebase, asks for target edition (OSS vs Enterprise) and version, infers access patterns from method calls and key/channel/stream literals, synthesizes a least-privilege rule with per-term annotations, and (OSS only, when a Redis MCP is connected) can apply the rule via a safety-gated workflow.
+description: Use when the user asks to generate, build, scope, infer, or review a Redis ACL for a backend service. Scans the codebase, asks for target edition (OSS vs Enterprise) and version, infers access patterns from method calls and key/channel/stream literals, and synthesizes a least-privilege rule with per-term annotations. When a Redis MCP is connected, reads the exact server version from INFO SERVER instead of asking.
 disallowedTools: Write, Edit, NotebookEdit, Bash
 color: red
 ---
@@ -98,9 +98,9 @@ Do **not** use INFO output to infer edition. Redis Cloud sanitizes INFO: `redis_
 
 ### 3. Ask the user (batched, before synthesis)
 
-After discovery, ask these questions **in a single batched prompt**. Do not synthesize until the user answers. The baseline is four questions (1–4); additional conditional questions (5, 6) only fire if discovery surfaced something that needs them.
+**Your next reply after completing step 2 must contain only the questions below — nothing else. No summary of what you found, no partial rule, no preamble beyond a single sentence like "Here are a few questions before I synthesize." Send the questions, then stop. Do not proceed to step 4 or 5 until the user replies.**
 
-**This step is mandatory and cannot be skipped.** Do not attempt to infer the answers from static analysis, INFO output, or any other signal. Even if you believe you know the edition or version, you must ask. The user's answer is the authoritative input — your inference is not.
+Do not infer any answer from static analysis, INFO output, or any other signal. Even if you believe you know the answer (edition, version, etc.), you must still ask. The user's answer is authoritative.
 
 ```
 Before I synthesize the rule, four questions (plus follow-ups based on what I found):
@@ -141,20 +141,17 @@ If the user picked **Strict** or **Favor brevity** in question 4, do NOT ask the
 
 Wait for the user's response. Do not proceed without explicit answers to questions 1–4 (the always-asked baseline) and any of 5/6 that you raised.
 
-### 4. (Optional) MCP discovery — only if Redis MCP is connected
+### 4. (Optional) MCP context — only if Redis MCP is connected
 
-When MCP tools for Redis are available, use them to enrich context **before** synthesis. These are read-only operations:
+The `redis/mcp-redis` MCP server exposes data-plane operations only — it does **not** expose ACL commands (`ACL CAT`, `ACL LIST`, `ACL GETUSER`, `ACL SETUSER`, `ACL WHOAMI`). Do not attempt to call those — they don't exist as MCP tools.
 
-- `ACL WHOAMI` — confirm current authenticated user
-- `ACL CAT` — enumerate the categories actually supported by the live server
-- `ACL CAT @<category>` — for **each category** your synthesis will touch (the categories implied by step 2e's command inventory), list the commands in it. **This is the authoritative source for the >50% category-collapse rule.** The skill's `command-category-map.md` is a fallback for degraded mode (no MCP) and a sanity check — `ACL CAT` reflects the target server's actual version *and* loaded modules.
-- `ACL LIST` / `ACL GETUSER` — inspect existing users for naming collisions and patterns
+What you can use:
 
-**Permitted MCP tools in this step:** only the four above, plus `INFO SERVER` (from step 2h). Do **not** call key-scanning tools (`scan_keys`, `scan_all_keys`, `get`, `hgetall`, `lrange`, etc.) or any command that reads application data from the database. ACL generation is a static analysis task — you learn the access pattern from the source code, not by inspecting the live data model.
+- **`INFO SERVER`** (already done in step 2h) — Redis version, mode. Note the version in the "Detected context" block.
 
-Note what you learned. **Never** create, modify, or delete an ACL during this step — that's gated to step 7 with explicit user confirmation.
+**Permitted MCP tools in this step:** `info` only. Do **not** call `scan_keys`, `scan_all_keys`, `get`, `hgetall`, or any tool that reads application data from the database. ACL generation derives access patterns from source code, not the live data model.
 
-If MCP is connected and the user said "Enterprise" in step 3: most ACL writes are gated through the cluster manager REST API (blocked at the data plane). Read-side commands (`ACL LIST`, `ACL GETUSER`) may still work for context; use them if so. Do not attempt provisioning on Enterprise.
+For command-to-category mapping, use the skill's `command-category-map.md` and `version-deltas.md` — these are your authoritative offline reference.
 
 ### 5. Synthesize the rule
 
@@ -166,7 +163,7 @@ For each command in the inventory, identify its category (or categories) using t
 
 For each category that has *any* command used:
 
-- Determine the total commands in the category. **Preferred source: live `ACL CAT @<category>` from step 4 (MCP connected).** Fallback: the skill's `command-category-map.md`. If you fall back, note "using offline reference, version-specific drift possible" alongside the count.
+- Determine the total commands in the category using the skill's `command-category-map.md` and the version deltas from `version-deltas.md` for the target version the user specified in step 3.
 - Count how many of those commands the service actually uses.
 - Apply the **granularity preference** from step 3 question #4:
   - **Strict**: always emit individual command grants (`+CMD1 +CMD2 ...`). Never collapse to category, regardless of usage percentage.
@@ -180,7 +177,7 @@ Never silently over-grant. If the user picked **balanced** and somehow didn't an
 In this order (for readability):
 
 1. Authentication flag — `on` (OSS path only; Enterprise users handle auth at the User object level)
-2. Password placeholder — `><replace_password_here>` (OSS path only; never invent a real password)
+2. Password placeholder — use the **exact token** `><changeme>` (OSS path only; never invent a real password, never vary this token)
 3. Key clauses — `~pattern1 ~pattern2 ...` (sorted)
 4. Channel clauses — `&pattern1 &pattern2 ...` (sorted)
 5. Positive grants — `+CMD ...` or `+@category` per step 5b decisions
@@ -194,7 +191,7 @@ In this order (for readability):
 ## Redis ACL SETUSER command
 
 ```
-ACL SETUSER <username> on ><replace_password_here> ~cache:user:* ~session:* &notifications +GET +MGET +SET +SETEX +PUBLISH +XADD
+ACL SETUSER <username> on ><changeme> ~cache:user:* ~session:* &notifications +GET +MGET +SET +SETEX +PUBLISH +XADD
 ```
 
 ## Per-clause annotations
@@ -202,7 +199,7 @@ ACL SETUSER <username> on ><replace_password_here> ~cache:user:* ~session:* &not
 | Clause | Grants | Justified by |
 |--------|--------|--------------|
 | `on` | User is enabled | (required) |
-| `><replace_password_here>` | Sets the user's password | Replace before running. Use a strong, randomly-generated password. |
+| `><changeme>` | Sets the user's password | Replace before running. Use a strong, randomly-generated password. |
 | `~cache:user:*` | Read/write access to keys matching `cache:user:*` | `service.py:13` (`CACHE_PREFIX`); `service.py:20,24,29` (cache_user, get_user, get_users) |
 | `&notifications` | Publish/subscribe on the `notifications` channel | `service.py:15` (`NOTIFY_CHANNEL`); `service.py:37` (notify → PUBLISH) |
 | `+GET`, `+MGET` | Read commands needed | `service.py:24,29` |
@@ -226,7 +223,7 @@ Type `apply` to apply this rule against the MCP-connected Redis. You'll see a sa
 - **Target Redis edition:** OSS (asked)
 - **Target Redis version:** 7.x (asked)
 - **Defense-in-depth denies:** {included / not included} (asked)
-- **MCP status:** {connected — categories confirmed via `ACL CAT` / **not connected** — without an MCP connection, live category verification and the `apply` workflow (safety-gated provisioning + impersonation test) aren't available. The rule is generated from the baked command-category map. Type `apply` for one-step MCP setup, or see README §MCP setup.}
+- **MCP status:** {connected — Redis version read from `INFO SERVER` / **not connected** — Redis version was asked; rule generated from baked command-category map}
 - **Mapping notes:** {No ambiguous mappings detected / **N call site(s) flagged for verification**: [list each, e.g., "service.py:42 (`r.eval(...)`) — likely emits both EVAL and EVALSHA"]. For absolute certainty, run `MONITOR` against a test Redis while executing the flagged paths. See skill reference `client-library-patterns.md` §Caveats for details.}
 ````
 
@@ -308,7 +305,7 @@ About to apply this ACL rule to:
   Port:             <port>
   Authenticated as: <user from ACL WHOAMI>
   Edition:          OSS (per your earlier answer)
-  Rule:             <the rule from step 6a, with ><replace_password_here> still as placeholder>
+  Rule:             <the rule from step 6a, with ><changeme> still as placeholder>
 
 Before I can apply, I need the actual password for `<username>`.
 Reply with:  yes <the-password>
@@ -326,7 +323,7 @@ Anything that does not start with `yes` cancels with: *"Cancelled. The rule was 
 
 #### 7c. Apply
 
-Substitute the confirmed password into the rule, replacing `><replace_password_here>` with `><actual-password>`. Run the full `ACL SETUSER` command via MCP. Never apply with the literal placeholder still in place.
+Substitute the confirmed password into the rule, replacing `><changeme>` with `><actual-password>`. Run the full `ACL SETUSER` command via MCP. Never apply with the literal placeholder still in place.
 
 #### 7d. Verify
 
