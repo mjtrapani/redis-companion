@@ -84,10 +84,10 @@ For absolute certainty on any flagged call, recommend the user run `MONITOR` aga
 
 ### 3. Ask the user (batched, before synthesis)
 
-After discovery, ask these questions **in a single batched prompt**. Do not synthesize until the user answers.
+After discovery, ask these questions **in a single batched prompt**. Do not synthesize until the user answers. The baseline is four questions (1–4); additional conditional questions (5, 6) only fire if discovery surfaced something that needs them.
 
 ```
-Before I synthesize the rule, three questions:
+Before I synthesize the rule, four questions (plus follow-ups based on what I found):
 
 1. **Target Redis edition**: Open Source (OSS / Redis Cloud direct-connect) or Enterprise (Redis Software / Redis Cloud Enterprise)?
    - This determines output shape — OSS gets a full `ACL SETUSER` command; Enterprise gets just the rule body (you'll paste it into an ACL Rule via the admin UI or REST API).
@@ -99,24 +99,31 @@ Before I synthesize the rule, three questions:
 3. **Defense-in-depth denies**: include explicit deny clauses (`-@admin -@dangerous`) even when those categories aren't used by the service?
    - Industry best practice for application service accounts. Most relevant when the rule includes category grants (e.g., `+@write` pulls in `FLUSHDB` unless `-@dangerous` denies it). Less relevant when all grants are individual commands.
    - Recommended: yes for category-grant rules; optional for individual-grant rules.
+
+4. **Permission granularity preference**:
+   - **Strict least-privilege** — grant ONLY the commands your code uses. No category collapsing, ever. Rule may be longer (one `+CMD` per command) but every grant is justified by a specific call site.
+   - **Balanced** (recommended default) — when >50% of a category's commands are used, I'll ask you per-category whether to collapse to `+@category` (briefer, includes a few unused-but-not-dangerous commands) or keep individual grants.
+   - **Favor brevity** — when >50% of a category's commands are used, auto-collapse to `+@category` without asking. Shorter rule. Accepts that some unused (non-dangerous) commands will be granted by category membership.
 ```
 
-If you found **speculation candidates** in step 2f, add a 4th question listing each:
+If you found **speculation candidates** in step 2f, append a 5th question listing each:
 
 ```
-4. I noticed [signal]. Should I include [proposed grant] now, or leave it out?
+5. I noticed [signal]. Should I include [proposed grant] now, or leave it out?
 ```
 
-If category collapse opportunities exist (any category where >50% of its commands are used by the service — see step 5), pre-stage that question too:
+**Only if the user picked "Balanced" in question 4**, AND if category collapse opportunities exist (any category where >50% of its commands are used by the service — see step 5b), pre-stage a per-category question for each:
 
 ```
-5. Category collapse opportunity: of the ~35 commands in `@write`, your service uses 18 (51%). Two options:
+6. Category collapse opportunity: of the ~35 commands in `@write`, your service uses 18 (51%). Two options:
    - **Collapse** to `+@write` (briefer rule, slightly broader access — would pull in DEL, EXPIRE, INCR, etc.).
    - **Keep individual** grants (`+SET +SETEX +XADD ...`) — strict least-privilege.
    Which would you like?
 ```
 
-Wait for the user's response. Do not proceed without explicit answers to all questions.
+If the user picked **Strict** or **Favor brevity** in question 4, do NOT ask the per-category question — apply the blanket preference instead (strict → all individual; brevity → auto-collapse).
+
+Wait for the user's response. Do not proceed without explicit answers to questions 1–4 (the always-asked baseline) and any of 5/6 that you raised.
 
 ### 4. (Optional) MCP discovery — only if Redis MCP is connected
 
@@ -137,16 +144,18 @@ If MCP is connected and the user said "Enterprise" in step 3: most ACL writes ar
 
 For each command in the inventory, identify its category (or categories) using the skill's `command-category-map.md`. Apply the target Redis version's deltas from `version-deltas.md` (e.g., scripting bundled into `@write` in Redis 6, separate `@scripting` category in Redis 7+).
 
-#### 5b. Decide grant strategy per category (ACL Builder's >50% rule + per-case ask)
+#### 5b. Decide grant strategy per category (granularity preference + ACL Builder's >50% rule)
 
 For each category that has *any* command used:
 
 - Determine the total commands in the category. **Preferred source: live `ACL CAT @<category>` from step 4 (MCP connected).** Fallback: the skill's `command-category-map.md`. If you fall back, note "using offline reference, version-specific drift possible" alongside the count.
 - Count how many of those commands the service actually uses.
-- **If used / total > 50%**: this is a collapse opportunity. The user was asked about this in step 3 — apply their answer.
-- **Else**: emit individual command grants (`+CMD1 +CMD2 ...`). Do not collapse to the category.
+- Apply the **granularity preference** from step 3 question #4:
+  - **Strict**: always emit individual command grants (`+CMD1 +CMD2 ...`). Never collapse to category, regardless of usage percentage.
+  - **Balanced** (default): if `used / total > 50%`, the user was asked per-category in step 3 question #6 — apply their answer. Else, emit individual command grants.
+  - **Favor brevity**: if `used / total > 50%`, collapse to `+@category` (no ask). Else, emit individual command grants.
 
-Default behavior if the user didn't explicitly answer per-category (e.g., only one collapse was in step 3 and there are more): default to individual grants. Never silently over-grant.
+Never silently over-grant. If the user picked **balanced** and somehow didn't answer a per-category prompt (e.g., a category collapse opportunity surfaced mid-synthesis that wasn't pre-staged), default to individual grants and surface the missed opportunity in the output ("Note: `@write` had a collapse opportunity I missed in step 3 — re-invoke me if you'd like to re-evaluate").
 
 #### 5c. Compose the rule body
 
