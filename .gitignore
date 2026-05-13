@@ -21,3 +21,8 @@ npm-debug.log*
 # Env
 .env
 .env.local
+
+# Redis
+dump.rdb
+*.rdb
+appendonly.aof
