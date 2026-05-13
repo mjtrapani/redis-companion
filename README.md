@@ -111,22 +111,29 @@ This is **expected and benign** — the plugin's skill, agent, and hook all work
 ## How it works
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'background': '#0f1117', 'primaryColor': '#1c2b3a', 'primaryTextColor': '#e2e8f0', 'primaryBorderColor': '#334155', 'lineColor': '#64748b', 'secondaryColor': '#1c2b3a', 'tertiaryColor': '#0d1520', 'clusterBkg': '#0d1520', 'clusterBorder': '#2d3f50', 'titleColor': '#e2e8f0', 'edgeLabelBackground': '#0f1117'}}}%%
 flowchart TD
-    U([User]) -->|"/redis-companion:analyze path\nor conversational prompt"| A
+    classDef entry  fill:#1c2b3a,stroke:#DC382D,stroke-width:2px,color:#fff
+    classDef red    fill:#1c2b3a,stroke:#DC382D,stroke-width:1px,color:#e2e8f0
+    classDef node   fill:#1c2b3a,stroke:#334155,color:#e2e8f0
+    classDef gate   fill:#0d1520,stroke:#334155,color:#cbd5e1
 
-    subgraph Plugin["redis-companion"]
-        A[acl-generator agent] --> B[Load redis-acl-patterns skill]
-        B --> C[Scan service directory\nDetect client library\nInventory commands · key patterns\nchannels · streams]
-        C --> D{MCP connected?}
-        D -->|Yes| E[INFO SERVER · ACL CAT\nACL LIST inspection]
-        D -->|No| F[Use skill reference data]
-        E --> G[Ask user: edition · version\ngranularity · defense-in-depth]
+    U([User]):::entry -->|"analyze path · conversational"| A
+
+    subgraph P["redis-companion"]
+        A[acl-generator agent]:::red
+        A --> B[Load redis-acl-patterns skill]:::node
+        B --> C["Scan service directory · detect client library\ninventory commands · key patterns · channels · streams"]:::node
+        C --> D{MCP connected?}:::gate
+        D -->|Yes| E["INFO SERVER · ACL CAT · ACL LIST"]:::red
+        D -->|No| F[Skill reference data]:::node
+        E --> G["Ask: edition · version · granularity · defense-in-depth"]:::node
         F --> G
-        G --> H[Synthesize ACL rule\nApply version deltas\nCategory collapse where >50%]
-        H --> I[Emit annotated output\nper-clause source citations]
-        I --> J{OSS + MCP?}
-        J -->|Yes| K["Safety-gated apply\nACL SETUSER → verify → validate"]
-        J -->|No| L[Manual apply instructions]
+        G --> H["Synthesize rule · apply version deltas · collapse categories"]:::node
+        H --> I[Annotated output with per-clause source citations]:::red
+        I --> J{OSS + MCP?}:::gate
+        J -->|Yes| K["Safety-gated apply · ACL SETUSER → verify → validate"]:::red
+        J -->|No| L[Manual apply instructions]:::node
     end
 
     I --> U
