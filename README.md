@@ -24,18 +24,26 @@ This plugin removes that friction. It reads the code, derives the intent, and em
 
 You need [Claude Code](https://code.claude.com/) installed and authenticated.
 
+### Option A — Marketplace install (recommended)
+
+In any Claude Code session:
+
+1. Open `/plugins`
+2. Add marketplace → paste `github:mjtrapani/redis-companion`
+3. Install **redis-companion**
+4. Restart Claude Code
+
+The plugin is now available in every session, no flags needed.
+
+### Option B — Local load (dev / one-off)
+
 ```bash
-# 1. Clone the repo
 git clone https://github.com/mjtrapani/redis-companion.git
 cd redis-companion
-
-# 2. Launch Claude Code with the plugin loaded
 claude --plugin-dir .
 ```
 
-That's it. The plugin is active.
-
-To verify, in the Claude Code prompt:
+To verify either install, in the Claude Code prompt:
 
 ```
 /agents
