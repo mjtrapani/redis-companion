@@ -143,7 +143,7 @@ The plugin is four cooperating components, each doing one job:
 
 Knowledge base, in `skills/redis-acl-patterns/`. Loads automatically when conversation touches Redis client code or ACL syntax. Contains the ACL DSL primer, the OSS vs Enterprise fork map, and pointers to four detailed references that load on demand:
 
-- `command-category-map.md` — categories → commands for the >50% category-collapse rule
+- `command-category-map.md` — categories → commands for the >50% category-collapse rule. **Generated from upstream `redis/redis@8.6.3` command JSONs** via `scripts/build-category-map.py` — every entry is verifiable against the official Redis source. Each command annotated with its `Since:` version so the agent can filter for older targets.
 - `version-deltas.md` — Redis 6 / 7 / 8 changes (scripting split, selectors, module-category expansion)
 - `client-library-patterns.md` — `redis-py` / `ioredis` / `go-redis` method → Redis command mappings, with a caveats section for non-1:1 cases (scripting helpers, locks, subcommand methods, transactional pipelines)
 - `key-pattern-extraction.md` — ten-case table for deriving `~prefix:*` clauses from source code

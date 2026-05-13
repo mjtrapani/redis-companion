@@ -157,7 +157,7 @@ For command-to-category mapping, use the skill's `command-category-map.md` and `
 
 #### 5a. Map commands → categories
 
-For each command in the inventory, identify its category (or categories) using the skill's `command-category-map.md`. Apply the target Redis version's deltas from `version-deltas.md` (e.g., scripting bundled into `@write` in Redis 6, separate `@scripting` category in Redis 7+).
+For each command in the inventory, identify its category (or categories) using the skill's `command-category-map.md`. The map is **generated from upstream `redis/redis@8.6.3` command JSONs** (regeneratable via `scripts/build-category-map.py`) — it's authoritative for that version. Filter by each command's `Since:` annotation for the target Redis version (e.g., a command with `Since: 7.0.0` is unavailable on Redis 6.x). Apply any cross-version category re-classifications from `version-deltas.md` on top of the map (e.g., `EVAL` is in `@scripting` per the upstream-derived map but was in `@write` on Redis 6.x).
 
 #### 5b. Decide grant strategy per category (granularity preference + ACL Builder's >50% rule)
 

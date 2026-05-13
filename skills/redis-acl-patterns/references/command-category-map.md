@@ -1,271 +1,1223 @@
 # Command-category map
 
-Reference mapping of Redis commands to ACL categories. Structured **category → commands** so the >50% category-collapse rule is a direct count.
-
-> ⚠️ **`ACL CAT @<category>` against the live server is the most authoritative possible source** — it reflects the target's actual Redis version *and* loaded modules. **However**, the official `redis/mcp-redis` server does not expose ACL commands today, so this map is the agent's *primary* source. Run `ACL CAT` manually via `redis-cli` if you need to verify against a specific Redis version, especially Redis 8 or any deployment with modules loaded.
-
-Counts and lists are accurate for **Redis 7.x core** (no modules loaded) unless otherwise noted. See `version-deltas.md` for what changes across Redis 6 / 7 / 8.
+> **Generated from [redis/redis@8.6.3](https://github.com/redis/redis/tree/8.6.3/src/commands).** Run `scripts/build-category-map.py` to regenerate from a newer Redis release.
+>
+> Each command's ACL category membership is derived from upstream `acl_categories` (explicit, e.g., `STRING`→`@string`) and `command_flags` (`READONLY`→`@read`, `WRITE`→`@write`, `ADMIN`→`@admin`, `BLOCKING`→`@blocking`, `FAST`→`@fast`; everything not `@fast` is `@slow`).
+>
+> **422 commands** total (core Redis 8.6.3, no modules — see SUBMISSION_NOTE.md item #4 for module coverage as future work).
+>
+> The **Since** column shows the Redis version that introduced each command. The agent uses this to filter for the target version: a command with `Since: 7.0.0` is unavailable on Redis 6.x. **Cross-version category re-classifications** (e.g., `EVAL` moved from `@write` to `@scripting` in Redis 7.0) are documented in `version-deltas.md` and applied on top of this map.
 
 ---
 
-## Standard categories
-
-### `@keyspace`
-
-Commands that operate on keys — manage their existence, expiry, or metadata.
-
-**Commands (Redis 7.x, ~25):**
-
-`DEL`, `UNLINK`, `EXISTS`, `EXPIRE`, `EXPIREAT`, `PEXPIRE`, `PEXPIREAT`, `EXPIRETIME`, `PEXPIRETIME`, `PERSIST`, `TTL`, `PTTL`, `KEYS`, `MOVE`, `COPY`, `OBJECT`, `RENAME`, `RENAMENX`, `RANDOMKEY`, `SCAN`, `TYPE`, `WAIT`, `WAITAOF`, `DUMP`, `RESTORE`, `TOUCH`, `MIGRATE`, `DBSIZE`
-
-> Several of these (`KEYS`, `MIGRATE`, `OBJECT`, `MOVE`) are also `@dangerous` — they overlap categories.
-
-### `@read`
-
-Commands that read data without modifying it.
-
-**Commands (Redis 7.x, ~55):**
-
-`GET`, `GETRANGE`, `GETBIT`, `MGET`, `EXISTS`, `STRLEN`, `SUBSTR`, `TYPE`, `KEYS`, `SCAN`, `TTL`, `PTTL`, `EXPIRETIME`, `PEXPIRETIME`, `DBSIZE`, `RANDOMKEY`, `OBJECT`, `DUMP`, `TOUCH`,
-`HGET`, `HMGET`, `HGETALL`, `HEXISTS`, `HKEYS`, `HVALS`, `HLEN`, `HSTRLEN`, `HSCAN`, `HRANDFIELD`,
-`LRANGE`, `LLEN`, `LINDEX`, `LPOS`,
-`SISMEMBER`, `SMISMEMBER`, `SMEMBERS`, `SCARD`, `SUNION`, `SINTER`, `SINTERCARD`, `SDIFF`, `SRANDMEMBER`, `SSCAN`,
-`ZRANGE`, `ZRANGEBYSCORE`, `ZRANGEBYLEX`, `ZREVRANGE`, `ZREVRANGEBYSCORE`, `ZREVRANGEBYLEX`, `ZRANK`, `ZREVRANK`, `ZSCORE`, `ZMSCORE`, `ZCARD`, `ZCOUNT`, `ZLEXCOUNT`, `ZRANDMEMBER`, `ZSCAN`, `ZUNION`, `ZINTER`, `ZINTERCARD`, `ZDIFF`,
-`BITCOUNT`, `BITPOS`, `BITFIELD_RO`,
-`GEODIST`, `GEOPOS`, `GEOHASH`, `GEORADIUS_RO`, `GEORADIUSBYMEMBER_RO`, `GEOSEARCH`,
-`XLEN`, `XRANGE`, `XREVRANGE`, `XREAD`, `XINFO`, `XPENDING`,
-`PFCOUNT`,
-`LCS`, `GETEX`
-
-### `@write`
-
-Commands that modify data.
-
-**Commands (Redis 7.x, ~85):**
-
-`SET`, `SETNX`, `SETEX`, `PSETEX`, `MSET`, `MSETNX`, `APPEND`, `INCR`, `INCRBY`, `INCRBYFLOAT`, `DECR`, `DECRBY`, `GETSET`, `GETEX`, `GETDEL`, `SETRANGE`, `SETBIT`, `BITFIELD`, `BITOP`,
-`DEL`, `UNLINK`, `EXPIRE`, `EXPIREAT`, `PEXPIRE`, `PEXPIREAT`, `PERSIST`, `RENAME`, `RENAMENX`, `COPY`, `MOVE`, `RESTORE`,
-`HSET`, `HMSET`, `HSETNX`, `HDEL`, `HINCRBY`, `HINCRBYFLOAT`,
-`LPUSH`, `LPUSHX`, `RPUSH`, `RPUSHX`, `LPOP`, `RPOP`, `LMPOP`, `LINSERT`, `LSET`, `LREM`, `LTRIM`, `LMOVE`, `RPOPLPUSH`,
-`SADD`, `SREM`, `SPOP`, `SMOVE`, `SUNIONSTORE`, `SINTERSTORE`, `SDIFFSTORE`,
-`ZADD`, `ZREM`, `ZINCRBY`, `ZPOPMIN`, `ZPOPMAX`, `ZMPOP`, `ZREMRANGEBYRANK`, `ZREMRANGEBYSCORE`, `ZREMRANGEBYLEX`, `ZUNIONSTORE`, `ZINTERSTORE`, `ZDIFFSTORE`, `ZRANGESTORE`,
-`GEOADD`, `GEORADIUS`, `GEORADIUSBYMEMBER`, `GEOSEARCHSTORE`,
-`XADD`, `XDEL`, `XTRIM`, `XGROUP`, `XACK`, `XCLAIM`, `XAUTOCLAIM`, `XSETID`,
-`PFADD`, `PFMERGE`,
-`FLUSHDB`, `FLUSHALL`,
-`SORT`, `SORT_RO`
-
-> `FLUSHDB`/`FLUSHALL` are also `@dangerous` — they overlap. If the user wants to deny destructive writes, `-@dangerous` is the typical defense.
-
-### `@string`
-
-String data-type operations.
-
-**Commands (Redis 7.x, ~25):**
-
-`SET`, `GET`, `SETEX`, `PSETEX`, `SETNX`, `MSET`, `MSETNX`, `MGET`, `GETSET`, `GETEX`, `GETDEL`, `APPEND`, `STRLEN`, `SUBSTR`, `GETRANGE`, `SETRANGE`, `INCR`, `INCRBY`, `INCRBYFLOAT`, `DECR`, `DECRBY`, `LCS`
-
-### `@hash`
-
-Hash data-type operations.
-
-**Commands (Redis 7.x, ~16; Redis 7.4+ adds 9 hash-field-TTL commands):**
-
-`HSET`, `HGET`, `HMSET`, `HMGET`, `HSETNX`, `HEXISTS`, `HDEL`, `HLEN`, `HSTRLEN`, `HKEYS`, `HVALS`, `HGETALL`, `HRANDFIELD`, `HINCRBY`, `HINCRBYFLOAT`, `HSCAN`
-
-Redis 7.4+ also adds: `HEXPIRE`, `HEXPIREAT`, `HPEXPIRE`, `HPEXPIREAT`, `HEXPIRETIME`, `HPEXPIRETIME`, `HTTL`, `HPTTL`, `HPERSIST`.
-
-### `@list`
-
-List data-type operations.
-
-**Commands (Redis 7.x, ~24):**
-
-`LPUSH`, `LPUSHX`, `RPUSH`, `RPUSHX`, `LPOP`, `RPOP`, `LMPOP`, `BLPOP`, `BRPOP`, `BLMPOP`, `LLEN`, `LRANGE`, `LINDEX`, `LSET`, `LINSERT`, `LREM`, `LTRIM`, `LPOS`, `LMOVE`, `BLMOVE`, `RPOPLPUSH`, `BRPOPLPUSH`
-
-### `@set`
-
-Unordered-set data-type operations.
-
-**Commands (Redis 7.x, ~17):**
-
-`SADD`, `SREM`, `SCARD`, `SMEMBERS`, `SISMEMBER`, `SMISMEMBER`, `SRANDMEMBER`, `SPOP`, `SMOVE`, `SUNION`, `SUNIONSTORE`, `SINTER`, `SINTERSTORE`, `SINTERCARD`, `SDIFF`, `SDIFFSTORE`, `SSCAN`
-
-### `@sortedset`
-
-Sorted-set data-type operations.
-
-**Commands (Redis 7.x, ~36):**
-
-`ZADD`, `ZREM`, `ZSCORE`, `ZMSCORE`, `ZINCRBY`, `ZRANGE`, `ZREVRANGE`, `ZRANGEBYSCORE`, `ZREVRANGEBYSCORE`, `ZRANGEBYLEX`, `ZREVRANGEBYLEX`, `ZRANGESTORE`, `ZRANK`, `ZREVRANK`, `ZCARD`, `ZCOUNT`, `ZLEXCOUNT`, `ZUNION`, `ZUNIONSTORE`, `ZINTER`, `ZINTERSTORE`, `ZINTERCARD`, `ZDIFF`, `ZDIFFSTORE`, `ZPOPMIN`, `ZPOPMAX`, `BZPOPMIN`, `BZPOPMAX`, `ZMPOP`, `BZMPOP`, `ZREMRANGEBYRANK`, `ZREMRANGEBYSCORE`, `ZREMRANGEBYLEX`, `ZSCAN`, `ZRANDMEMBER`
-
-### `@bitmap`
-
-Bitmap operations on string values.
-
-**Commands (Redis 7.x, ~7):**
-
-`SETBIT`, `GETBIT`, `BITCOUNT`, `BITOP`, `BITPOS`, `BITFIELD`, `BITFIELD_RO`
-
-### `@hyperloglog`
-
-HyperLogLog cardinality estimation.
-
-**Commands (Redis 7.x, 3):**
-
-`PFADD`, `PFCOUNT`, `PFMERGE`
-
-### `@geo`
-
-Geospatial operations.
-
-**Commands (Redis 7.x, ~10):**
-
-`GEOADD`, `GEODIST`, `GEOHASH`, `GEOPOS`, `GEORADIUS`, `GEORADIUS_RO`, `GEORADIUSBYMEMBER`, `GEORADIUSBYMEMBER_RO`, `GEOSEARCH`, `GEOSEARCHSTORE`
-
-### `@stream`
-
-Redis Stream operations.
-
-**Commands (Redis 7.x, ~16):**
-
-`XADD`, `XLEN`, `XREAD`, `XREADGROUP`, `XRANGE`, `XREVRANGE`, `XINFO`, `XDEL`, `XTRIM`, `XGROUP`, `XACK`, `XCLAIM`, `XAUTOCLAIM`, `XSETID`, `XPENDING`
-
-### `@pubsub`
-
-Publish-subscribe and sharded pub/sub.
-
-**Commands (Redis 7.x, ~9):**
-
-`PUBLISH`, `SUBSCRIBE`, `UNSUBSCRIBE`, `PSUBSCRIBE`, `PUNSUBSCRIBE`, `PUBSUB`, `SSUBSCRIBE` (7.0+), `SUNSUBSCRIBE` (7.0+), `SPUBLISH` (7.0+)
-
-> ⚠️ Recent Redis defaults to **restrictive** pub/sub — any service that publishes or subscribes must have an `&channel-pattern` clause in its rule.
-
-### `@connection`
-
-Connection lifecycle, authentication, and session-level commands.
-
-**Commands (Redis 7.x, ~14):**
-
-`AUTH`, `HELLO`, `CLIENT`, `PING`, `ECHO`, `QUIT`, `SELECT`, `RESET`, `CLIENT GETNAME`, `CLIENT SETNAME`, `CLIENT LIST`, `CLIENT INFO`, `CLIENT NO-EVICT`, `CLIENT NO-TOUCH`
-
-> `CLIENT` is one command with many subcommands; the ACL `@connection` grant covers most subcommands except those flagged `@admin`/`@dangerous` (e.g., `CLIENT KILL`, `CLIENT PAUSE`).
-
-### `@transaction`
-
-MULTI/EXEC transaction primitives.
-
-**Commands (Redis 7.x, 5):**
-
-`MULTI`, `EXEC`, `DISCARD`, `WATCH`, `UNWATCH`
-
-### `@scripting` (Redis 7+ — new category)
-
-Server-side scripting (Lua and Redis Functions).
-
-**Commands (Redis 7.x, ~16):**
-
-`EVAL`, `EVALSHA`, `EVAL_RO`, `EVALSHA_RO`, `SCRIPT LOAD`, `SCRIPT EXISTS`, `SCRIPT FLUSH`, `SCRIPT DEBUG`, `FCALL`, `FCALL_RO`, `FUNCTION LOAD`, `FUNCTION DUMP`, `FUNCTION RESTORE`, `FUNCTION FLUSH`, `FUNCTION LIST`, `FUNCTION STATS`, `FUNCTION DELETE`
-
-> **In Redis 6**, scripting commands were bundled into `@write`. If you're synthesizing a rule for Redis 6, treat `EVAL`/`EVALSHA` as `@write` members and don't expect `+@scripting` to be available.
-
-### `@admin`
-
-Server administration. **Almost never granted to application users.**
-
-**Commands (Redis 7.x, ~25):**
-
-`REPLICAOF`, `SLAVEOF`, `CONFIG`, `DEBUG`, `SHUTDOWN`, `MONITOR`, `SAVE`, `BGSAVE`, `BGREWRITEAOF`, `ACL`, `COMMAND`, `CLUSTER`, `FAILOVER`, `LATENCY`, `MODULE`, `SLOWLOG`, `MEMORY`, `LASTSAVE`, `ROLE`, `SWAPDB`, `RESET`, `PSYNC`, `REPLCONF`, `SYNC`
-
-### `@dangerous`
-
-Commands with high blast radius. Frequently denied via `-@dangerous` even when granted positively via `+@write` or `+@admin`, so the rule body doesn't accidentally include them.
-
-**Commands (Redis 7.x, ~30 — many overlap with `@admin`):**
-
-`KEYS`, `FLUSHDB`, `FLUSHALL`, `MIGRATE`, `MOVE`, `RESTORE`, `DEBUG`, `MONITOR`, `CLIENT KILL`, `CLIENT PAUSE`, `CLIENT UNPAUSE`, `CLUSTER`, `CONFIG`, `DBSIZE`, `FAILOVER`, `LASTSAVE`, `LATENCY`, `MEMORY`, `MODULE`, `OBJECT`, `PSYNC`, `REPLCONF`, `REPLICAOF`, `SLAVEOF`, `RESET`, `SAVE`, `BGSAVE`, `BGREWRITEAOF`, `SHUTDOWN`, `SLOWLOG`, `SWAPDB`, `SYNC`, `ACL` (overlap with @admin)
-
-### `@blocking`
-
-Commands that can block the client connection waiting for a value.
-
-**Commands (Redis 7.x, ~12):**
-
-`BLPOP`, `BRPOP`, `BLMOVE`, `BRPOPLPUSH`, `BLMPOP`, `BZPOPMIN`, `BZPOPMAX`, `BZMPOP`, `XREAD` (with `BLOCK`), `XREADGROUP` (with `BLOCK`), `WAIT`, `WAITAOF`, `CLIENT PAUSE` (blocks server)
-
-> Note: `XREAD`/`XREADGROUP` are in `@blocking` only when called with the `BLOCK` argument. ACL grants them on a command basis (no per-argument granularity), so granting `+XREAD` includes blocking usage. For services that use blocking operations, the persona should know the call site can pause the client.
-
-### `@fast`
-
-Commands with O(1) or amortized-O(1) complexity (excluding network overhead).
-
-Used primarily by infrastructure tooling (e.g., monitoring). Application rules rarely reference `@fast` directly; agent should not collapse to it.
-
-### `@slow`
-
-Commands with worse-than-O(log N) complexity. Includes most aggregations, set operations on large sets, and `KEYS`.
-
-Used primarily by tooling. Application rules rarely reference `@slow` directly.
+## `@keyspace`
+
+**36 commands** (Redis 8.6.3 — `Since: <X.Y.Z>` filters for older targets).
+
+| Command | Since |
+|---------|-------|
+| `COPY` | 6.2.0 |
+| `DBSIZE` | 1.0.0 |
+| `DEL` | 1.0.0 |
+| `DUMP` | 2.6.0 |
+| `EXISTS` | 1.0.0 |
+| `EXPIRE` | 1.0.0 |
+| `EXPIREAT` | 1.2.0 |
+| `EXPIRETIME` | 7.0.0 |
+| `FLUSHALL` | 1.0.0 |
+| `FLUSHDB` | 1.0.0 |
+| `KEYS` | 1.0.0 |
+| `MIGRATE` | 2.6.0 |
+| `MOVE` | 1.0.0 |
+| `OBJECT ENCODING` | 2.2.3 |
+| `OBJECT FREQ` | 4.0.0 |
+| `OBJECT HELP` | 6.2.0 |
+| `OBJECT IDLETIME` | 2.2.3 |
+| `OBJECT REFCOUNT` | 2.2.3 |
+| `PERSIST` | 2.2.0 |
+| `PEXPIRE` | 2.6.0 |
+| `PEXPIREAT` | 2.6.0 |
+| `PEXPIRETIME` | 7.0.0 |
+| `PTTL` | 2.6.0 |
+| `RANDOMKEY` | 1.0.0 |
+| `RENAME` | 1.0.0 |
+| `RENAMENX` | 1.0.0 |
+| `RESTORE` | 2.6.0 |
+| `RESTORE-ASKING` | 3.0.0 |
+| `SCAN` | 2.8.0 |
+| `SFLUSH` | 8.0.0 |
+| `SWAPDB` | 4.0.0 |
+| `TOUCH` | 3.2.1 |
+| `TRIMSLOTS` | 8.4.0 |
+| `TTL` | 1.0.0 |
+| `TYPE` | 1.0.0 |
+| `UNLINK` | 4.0.0 |
+
+## `@read`
+
+**95 commands** (Redis 8.6.3 — `Since: <X.Y.Z>` filters for older targets).
+
+| Command | Since |
+|---------|-------|
+| `BITCOUNT` | 2.6.0 |
+| `BITFIELD_RO` | 6.0.0 |
+| `BITPOS` | 2.8.7 |
+| `DBSIZE` | 1.0.0 |
+| `DIGEST` | 8.4.0 |
+| `DUMP` | 2.6.0 |
+| `EVALSHA_RO` | 7.0.0 |
+| `EVAL_RO` | 7.0.0 |
+| `EXISTS` | 1.0.0 |
+| `EXPIRETIME` | 7.0.0 |
+| `FCALL_RO` | 7.0.0 |
+| `GEODIST` | 3.2.0 |
+| `GEOHASH` | 3.2.0 |
+| `GEOPOS` | 3.2.0 |
+| `GEORADIUSBYMEMBER_RO` | 3.2.10 |
+| `GEORADIUS_RO` | 3.2.10 |
+| `GEOSEARCH` | 6.2.0 |
+| `GET` | 1.0.0 |
+| `GETBIT` | 2.2.0 |
+| `GETRANGE` | 2.4.0 |
+| `HEXISTS` | 2.0.0 |
+| `HEXPIRETIME` | 7.4.0 |
+| `HGET` | 2.0.0 |
+| `HGETALL` | 2.0.0 |
+| `HKEYS` | 2.0.0 |
+| `HLEN` | 2.0.0 |
+| `HMGET` | 2.0.0 |
+| `HPEXPIRETIME` | 7.4.0 |
+| `HPTTL` | 7.4.0 |
+| `HRANDFIELD` | 6.2.0 |
+| `HSCAN` | 2.8.0 |
+| `HSTRLEN` | 3.2.0 |
+| `HTTL` | 7.4.0 |
+| `HVALS` | 2.0.0 |
+| `KEYS` | 1.0.0 |
+| `LCS` | 7.0.0 |
+| `LINDEX` | 1.0.0 |
+| `LLEN` | 1.0.0 |
+| `LOLWUT` | 5.0.0 |
+| `LPOS` | 6.0.6 |
+| `LRANGE` | 1.0.0 |
+| `MEMORY USAGE` | 4.0.0 |
+| `MGET` | 1.0.0 |
+| `OBJECT ENCODING` | 2.2.3 |
+| `OBJECT FREQ` | 4.0.0 |
+| `OBJECT IDLETIME` | 2.2.3 |
+| `OBJECT REFCOUNT` | 2.2.3 |
+| `PEXPIRETIME` | 7.0.0 |
+| `PFCOUNT` | 2.8.9 |
+| `PTTL` | 2.6.0 |
+| `RANDOMKEY` | 1.0.0 |
+| `SCAN` | 2.8.0 |
+| `SCARD` | 1.0.0 |
+| `SDIFF` | 1.0.0 |
+| `SINTER` | 1.0.0 |
+| `SINTERCARD` | 7.0.0 |
+| `SISMEMBER` | 1.0.0 |
+| `SMEMBERS` | 1.0.0 |
+| `SMISMEMBER` | 6.2.0 |
+| `SORT_RO` | 7.0.0 |
+| `SRANDMEMBER` | 1.0.0 |
+| `SSCAN` | 2.8.0 |
+| `STRLEN` | 2.2.0 |
+| `SUBSTR` | 1.0.0 |
+| `SUNION` | 1.0.0 |
+| `TOUCH` | 3.2.1 |
+| `TTL` | 1.0.0 |
+| `TYPE` | 1.0.0 |
+| `XINFO CONSUMERS` | 5.0.0 |
+| `XINFO GROUPS` | 5.0.0 |
+| `XINFO STREAM` | 5.0.0 |
+| `XLEN` | 5.0.0 |
+| `XPENDING` | 5.0.0 |
+| `XRANGE` | 5.0.0 |
+| `XREAD` | 5.0.0 |
+| `XREVRANGE` | 5.0.0 |
+| `ZCARD` | 1.2.0 |
+| `ZCOUNT` | 2.0.0 |
+| `ZDIFF` | 6.2.0 |
+| `ZINTER` | 6.2.0 |
+| `ZINTERCARD` | 7.0.0 |
+| `ZLEXCOUNT` | 2.8.9 |
+| `ZMSCORE` | 6.2.0 |
+| `ZRANDMEMBER` | 6.2.0 |
+| `ZRANGE` | 1.2.0 |
+| `ZRANGEBYLEX` | 2.8.9 |
+| `ZRANGEBYSCORE` | 1.0.5 |
+| `ZRANK` | 2.0.0 |
+| `ZREVRANGE` | 1.2.0 |
+| `ZREVRANGEBYLEX` | 2.8.9 |
+| `ZREVRANGEBYSCORE` | 2.2.0 |
+| `ZREVRANK` | 2.0.0 |
+| `ZSCAN` | 2.8.0 |
+| `ZSCORE` | 1.2.0 |
+| `ZUNION` | 6.2.0 |
+
+## `@write`
+
+**124 commands** (Redis 8.6.3 — `Since: <X.Y.Z>` filters for older targets).
+
+| Command | Since |
+|---------|-------|
+| `APPEND` | 2.0.0 |
+| `BITFIELD` | 3.2.0 |
+| `BITOP` | 2.6.0 |
+| `BLMOVE` | 6.2.0 |
+| `BLMPOP` | 7.0.0 |
+| `BLPOP` | 2.0.0 |
+| `BRPOP` | 2.0.0 |
+| `BRPOPLPUSH` | 2.2.0 |
+| `BZMPOP` | 7.0.0 |
+| `BZPOPMAX` | 5.0.0 |
+| `BZPOPMIN` | 5.0.0 |
+| `COPY` | 6.2.0 |
+| `DECR` | 1.0.0 |
+| `DECRBY` | 1.0.0 |
+| `DEL` | 1.0.0 |
+| `DELEX` | 8.4.0 |
+| `EXPIRE` | 1.0.0 |
+| `EXPIREAT` | 1.2.0 |
+| `FLUSHALL` | 1.0.0 |
+| `FLUSHDB` | 1.0.0 |
+| `FUNCTION DELETE` | 7.0.0 |
+| `FUNCTION FLUSH` | 7.0.0 |
+| `FUNCTION LOAD` | 7.0.0 |
+| `FUNCTION RESTORE` | 7.0.0 |
+| `GEOADD` | 3.2.0 |
+| `GEORADIUS` | 3.2.0 |
+| `GEORADIUSBYMEMBER` | 3.2.0 |
+| `GEOSEARCHSTORE` | 6.2.0 |
+| `GETDEL` | 6.2.0 |
+| `GETEX` | 6.2.0 |
+| `GETSET` | 1.0.0 |
+| `HDEL` | 2.0.0 |
+| `HEXPIRE` | 7.4.0 |
+| `HEXPIREAT` | 7.4.0 |
+| `HGETDEL` | 8.0.0 |
+| `HGETEX` | 8.0.0 |
+| `HINCRBY` | 2.0.0 |
+| `HINCRBYFLOAT` | 2.6.0 |
+| `HMSET` | 2.0.0 |
+| `HPERSIST` | 7.4.0 |
+| `HPEXPIRE` | 7.4.0 |
+| `HPEXPIREAT` | 7.4.0 |
+| `HSET` | 2.0.0 |
+| `HSETEX` | 8.0.0 |
+| `HSETNX` | 2.0.0 |
+| `INCR` | 1.0.0 |
+| `INCRBY` | 1.0.0 |
+| `INCRBYFLOAT` | 2.6.0 |
+| `LINSERT` | 2.2.0 |
+| `LMOVE` | 6.2.0 |
+| `LMPOP` | 7.0.0 |
+| `LPOP` | 1.0.0 |
+| `LPUSH` | 1.0.0 |
+| `LPUSHX` | 2.2.0 |
+| `LREM` | 1.0.0 |
+| `LSET` | 1.0.0 |
+| `LTRIM` | 1.0.0 |
+| `MIGRATE` | 2.6.0 |
+| `MOVE` | 1.0.0 |
+| `MSET` | 1.0.1 |
+| `MSETEX` | 8.4.0 |
+| `MSETNX` | 1.0.1 |
+| `PERSIST` | 2.2.0 |
+| `PEXPIRE` | 2.6.0 |
+| `PEXPIREAT` | 2.6.0 |
+| `PFADD` | 2.8.9 |
+| `PFDEBUG` | 2.8.9 |
+| `PFMERGE` | 2.8.9 |
+| `PSETEX` | 2.6.0 |
+| `RENAME` | 1.0.0 |
+| `RENAMENX` | 1.0.0 |
+| `RESTORE` | 2.6.0 |
+| `RESTORE-ASKING` | 3.0.0 |
+| `RPOP` | 1.0.0 |
+| `RPOPLPUSH` | 1.2.0 |
+| `RPUSH` | 1.0.0 |
+| `RPUSHX` | 2.2.0 |
+| `SADD` | 1.0.0 |
+| `SDIFFSTORE` | 1.0.0 |
+| `SET` | 1.0.0 |
+| `SETBIT` | 2.2.0 |
+| `SETEX` | 2.0.0 |
+| `SETNX` | 1.0.0 |
+| `SETRANGE` | 2.2.0 |
+| `SFLUSH` | 8.0.0 |
+| `SINTERSTORE` | 1.0.0 |
+| `SMOVE` | 1.0.0 |
+| `SORT` | 1.0.0 |
+| `SPOP` | 1.0.0 |
+| `SREM` | 1.0.0 |
+| `SUNIONSTORE` | 1.0.0 |
+| `SWAPDB` | 4.0.0 |
+| `TRIMSLOTS` | 8.4.0 |
+| `UNLINK` | 4.0.0 |
+| `XACK` | 5.0.0 |
+| `XACKDEL` | 8.2.0 |
+| `XADD` | 5.0.0 |
+| `XAUTOCLAIM` | 6.2.0 |
+| `XCFGSET` | 8.6.0 |
+| `XCLAIM` | 5.0.0 |
+| `XDEL` | 5.0.0 |
+| `XDELEX` | 8.2.0 |
+| `XGROUP CREATE` | 5.0.0 |
+| `XGROUP CREATECONSUMER` | 6.2.0 |
+| `XGROUP DELCONSUMER` | 5.0.0 |
+| `XGROUP DESTROY` | 5.0.0 |
+| `XGROUP SETID` | 5.0.0 |
+| `XIDMPRECORD` | 8.6.2 |
+| `XREADGROUP` | 5.0.0 |
+| `XSETID` | 5.0.0 |
+| `XTRIM` | 5.0.0 |
+| `ZADD` | 1.2.0 |
+| `ZDIFFSTORE` | 6.2.0 |
+| `ZINCRBY` | 1.2.0 |
+| `ZINTERSTORE` | 2.0.0 |
+| `ZMPOP` | 7.0.0 |
+| `ZPOPMAX` | 5.0.0 |
+| `ZPOPMIN` | 5.0.0 |
+| `ZRANGESTORE` | 6.2.0 |
+| `ZREM` | 1.2.0 |
+| `ZREMRANGEBYLEX` | 2.8.9 |
+| `ZREMRANGEBYRANK` | 2.0.0 |
+| `ZREMRANGEBYSCORE` | 1.2.0 |
+| `ZUNIONSTORE` | 2.0.0 |
+
+## `@string`
+
+**25 commands** (Redis 8.6.3 — `Since: <X.Y.Z>` filters for older targets).
+
+| Command | Since |
+|---------|-------|
+| `APPEND` | 2.0.0 |
+| `DECR` | 1.0.0 |
+| `DECRBY` | 1.0.0 |
+| `DELEX` | 8.4.0 |
+| `DIGEST` | 8.4.0 |
+| `GET` | 1.0.0 |
+| `GETDEL` | 6.2.0 |
+| `GETEX` | 6.2.0 |
+| `GETRANGE` | 2.4.0 |
+| `GETSET` | 1.0.0 |
+| `INCR` | 1.0.0 |
+| `INCRBY` | 1.0.0 |
+| `INCRBYFLOAT` | 2.6.0 |
+| `LCS` | 7.0.0 |
+| `MGET` | 1.0.0 |
+| `MSET` | 1.0.1 |
+| `MSETEX` | 8.4.0 |
+| `MSETNX` | 1.0.1 |
+| `PSETEX` | 2.6.0 |
+| `SET` | 1.0.0 |
+| `SETEX` | 2.0.0 |
+| `SETNX` | 1.0.0 |
+| `SETRANGE` | 2.2.0 |
+| `STRLEN` | 2.2.0 |
+| `SUBSTR` | 1.0.0 |
+
+## `@hash`
+
+**28 commands** (Redis 8.6.3 — `Since: <X.Y.Z>` filters for older targets).
+
+| Command | Since |
+|---------|-------|
+| `HDEL` | 2.0.0 |
+| `HEXISTS` | 2.0.0 |
+| `HEXPIRE` | 7.4.0 |
+| `HEXPIREAT` | 7.4.0 |
+| `HEXPIRETIME` | 7.4.0 |
+| `HGET` | 2.0.0 |
+| `HGETALL` | 2.0.0 |
+| `HGETDEL` | 8.0.0 |
+| `HGETEX` | 8.0.0 |
+| `HINCRBY` | 2.0.0 |
+| `HINCRBYFLOAT` | 2.6.0 |
+| `HKEYS` | 2.0.0 |
+| `HLEN` | 2.0.0 |
+| `HMGET` | 2.0.0 |
+| `HMSET` | 2.0.0 |
+| `HPERSIST` | 7.4.0 |
+| `HPEXPIRE` | 7.4.0 |
+| `HPEXPIREAT` | 7.4.0 |
+| `HPEXPIRETIME` | 7.4.0 |
+| `HPTTL` | 7.4.0 |
+| `HRANDFIELD` | 6.2.0 |
+| `HSCAN` | 2.8.0 |
+| `HSET` | 2.0.0 |
+| `HSETEX` | 8.0.0 |
+| `HSETNX` | 2.0.0 |
+| `HSTRLEN` | 3.2.0 |
+| `HTTL` | 7.4.0 |
+| `HVALS` | 2.0.0 |
+
+## `@list`
+
+**24 commands** (Redis 8.6.3 — `Since: <X.Y.Z>` filters for older targets).
+
+| Command | Since |
+|---------|-------|
+| `BLMOVE` | 6.2.0 |
+| `BLMPOP` | 7.0.0 |
+| `BLPOP` | 2.0.0 |
+| `BRPOP` | 2.0.0 |
+| `BRPOPLPUSH` | 2.2.0 |
+| `LINDEX` | 1.0.0 |
+| `LINSERT` | 2.2.0 |
+| `LLEN` | 1.0.0 |
+| `LMOVE` | 6.2.0 |
+| `LMPOP` | 7.0.0 |
+| `LPOP` | 1.0.0 |
+| `LPOS` | 6.0.6 |
+| `LPUSH` | 1.0.0 |
+| `LPUSHX` | 2.2.0 |
+| `LRANGE` | 1.0.0 |
+| `LREM` | 1.0.0 |
+| `LSET` | 1.0.0 |
+| `LTRIM` | 1.0.0 |
+| `RPOP` | 1.0.0 |
+| `RPOPLPUSH` | 1.2.0 |
+| `RPUSH` | 1.0.0 |
+| `RPUSHX` | 2.2.0 |
+| `SORT` | 1.0.0 |
+| `SORT_RO` | 7.0.0 |
+
+## `@set`
+
+**19 commands** (Redis 8.6.3 — `Since: <X.Y.Z>` filters for older targets).
+
+| Command | Since |
+|---------|-------|
+| `SADD` | 1.0.0 |
+| `SCARD` | 1.0.0 |
+| `SDIFF` | 1.0.0 |
+| `SDIFFSTORE` | 1.0.0 |
+| `SINTER` | 1.0.0 |
+| `SINTERCARD` | 7.0.0 |
+| `SINTERSTORE` | 1.0.0 |
+| `SISMEMBER` | 1.0.0 |
+| `SMEMBERS` | 1.0.0 |
+| `SMISMEMBER` | 6.2.0 |
+| `SMOVE` | 1.0.0 |
+| `SORT` | 1.0.0 |
+| `SORT_RO` | 7.0.0 |
+| `SPOP` | 1.0.0 |
+| `SRANDMEMBER` | 1.0.0 |
+| `SREM` | 1.0.0 |
+| `SSCAN` | 2.8.0 |
+| `SUNION` | 1.0.0 |
+| `SUNIONSTORE` | 1.0.0 |
+
+## `@sortedset`
+
+**37 commands** (Redis 8.6.3 — `Since: <X.Y.Z>` filters for older targets).
+
+| Command | Since |
+|---------|-------|
+| `BZMPOP` | 7.0.0 |
+| `BZPOPMAX` | 5.0.0 |
+| `BZPOPMIN` | 5.0.0 |
+| `SORT` | 1.0.0 |
+| `SORT_RO` | 7.0.0 |
+| `ZADD` | 1.2.0 |
+| `ZCARD` | 1.2.0 |
+| `ZCOUNT` | 2.0.0 |
+| `ZDIFF` | 6.2.0 |
+| `ZDIFFSTORE` | 6.2.0 |
+| `ZINCRBY` | 1.2.0 |
+| `ZINTER` | 6.2.0 |
+| `ZINTERCARD` | 7.0.0 |
+| `ZINTERSTORE` | 2.0.0 |
+| `ZLEXCOUNT` | 2.8.9 |
+| `ZMPOP` | 7.0.0 |
+| `ZMSCORE` | 6.2.0 |
+| `ZPOPMAX` | 5.0.0 |
+| `ZPOPMIN` | 5.0.0 |
+| `ZRANDMEMBER` | 6.2.0 |
+| `ZRANGE` | 1.2.0 |
+| `ZRANGEBYLEX` | 2.8.9 |
+| `ZRANGEBYSCORE` | 1.0.5 |
+| `ZRANGESTORE` | 6.2.0 |
+| `ZRANK` | 2.0.0 |
+| `ZREM` | 1.2.0 |
+| `ZREMRANGEBYLEX` | 2.8.9 |
+| `ZREMRANGEBYRANK` | 2.0.0 |
+| `ZREMRANGEBYSCORE` | 1.2.0 |
+| `ZREVRANGE` | 1.2.0 |
+| `ZREVRANGEBYLEX` | 2.8.9 |
+| `ZREVRANGEBYSCORE` | 2.2.0 |
+| `ZREVRANK` | 2.0.0 |
+| `ZSCAN` | 2.8.0 |
+| `ZSCORE` | 1.2.0 |
+| `ZUNION` | 6.2.0 |
+| `ZUNIONSTORE` | 2.0.0 |
+
+## `@bitmap`
+
+**7 commands** (Redis 8.6.3 — `Since: <X.Y.Z>` filters for older targets).
+
+| Command | Since |
+|---------|-------|
+| `BITCOUNT` | 2.6.0 |
+| `BITFIELD` | 3.2.0 |
+| `BITFIELD_RO` | 6.0.0 |
+| `BITOP` | 2.6.0 |
+| `BITPOS` | 2.8.7 |
+| `GETBIT` | 2.2.0 |
+| `SETBIT` | 2.2.0 |
+
+## `@hyperloglog`
+
+**5 commands** (Redis 8.6.3 — `Since: <X.Y.Z>` filters for older targets).
+
+| Command | Since |
+|---------|-------|
+| `PFADD` | 2.8.9 |
+| `PFCOUNT` | 2.8.9 |
+| `PFDEBUG` | 2.8.9 |
+| `PFMERGE` | 2.8.9 |
+| `PFSELFTEST` | 2.8.9 |
+
+## `@geo`
+
+**10 commands** (Redis 8.6.3 — `Since: <X.Y.Z>` filters for older targets).
+
+| Command | Since |
+|---------|-------|
+| `GEOADD` | 3.2.0 |
+| `GEODIST` | 3.2.0 |
+| `GEOHASH` | 3.2.0 |
+| `GEOPOS` | 3.2.0 |
+| `GEORADIUS` | 3.2.0 |
+| `GEORADIUSBYMEMBER` | 3.2.0 |
+| `GEORADIUSBYMEMBER_RO` | 3.2.10 |
+| `GEORADIUS_RO` | 3.2.10 |
+| `GEOSEARCH` | 6.2.0 |
+| `GEOSEARCHSTORE` | 6.2.0 |
+
+## `@stream`
+
+**27 commands** (Redis 8.6.3 — `Since: <X.Y.Z>` filters for older targets).
+
+| Command | Since |
+|---------|-------|
+| `XACK` | 5.0.0 |
+| `XACKDEL` | 8.2.0 |
+| `XADD` | 5.0.0 |
+| `XAUTOCLAIM` | 6.2.0 |
+| `XCFGSET` | 8.6.0 |
+| `XCLAIM` | 5.0.0 |
+| `XDEL` | 5.0.0 |
+| `XDELEX` | 8.2.0 |
+| `XGROUP CREATE` | 5.0.0 |
+| `XGROUP CREATECONSUMER` | 6.2.0 |
+| `XGROUP DELCONSUMER` | 5.0.0 |
+| `XGROUP DESTROY` | 5.0.0 |
+| `XGROUP HELP` | 5.0.0 |
+| `XGROUP SETID` | 5.0.0 |
+| `XIDMPRECORD` | 8.6.2 |
+| `XINFO CONSUMERS` | 5.0.0 |
+| `XINFO GROUPS` | 5.0.0 |
+| `XINFO HELP` | 5.0.0 |
+| `XINFO STREAM` | 5.0.0 |
+| `XLEN` | 5.0.0 |
+| `XPENDING` | 5.0.0 |
+| `XRANGE` | 5.0.0 |
+| `XREAD` | 5.0.0 |
+| `XREADGROUP` | 5.0.0 |
+| `XREVRANGE` | 5.0.0 |
+| `XSETID` | 5.0.0 |
+| `XTRIM` | 5.0.0 |
+
+## `@pubsub`
+
+**13 commands** (Redis 8.6.3 — `Since: <X.Y.Z>` filters for older targets).
+
+| Command | Since |
+|---------|-------|
+| `PSUBSCRIBE` | 2.0.0 |
+| `PUBLISH` | 2.0.0 |
+| `PUBSUB CHANNELS` | 2.8.0 |
+| `PUBSUB NUMPAT` | 2.8.0 |
+| `PUBSUB NUMSUB` | 2.8.0 |
+| `PUBSUB SHARDCHANNELS` | 7.0.0 |
+| `PUBSUB SHARDNUMSUB` | 7.0.0 |
+| `PUNSUBSCRIBE` | 2.0.0 |
+| `SPUBLISH` | 7.0.0 |
+| `SSUBSCRIBE` | 7.0.0 |
+| `SUBSCRIBE` | 2.0.0 |
+| `SUNSUBSCRIBE` | 7.0.0 |
+| `UNSUBSCRIBE` | 2.0.0 |
+
+## `@connection`
+
+**38 commands** (Redis 8.6.3 — `Since: <X.Y.Z>` filters for older targets).
+
+| Command | Since |
+|---------|-------|
+| `ASKING` | 3.0.0 |
+| `AUTH` | 1.0.0 |
+| `CLIENT CACHING` | 6.0.0 |
+| `CLIENT GETNAME` | 2.6.9 |
+| `CLIENT GETREDIR` | 6.0.0 |
+| `CLIENT HELP` | 5.0.0 |
+| `CLIENT ID` | 5.0.0 |
+| `CLIENT INFO` | 6.2.0 |
+| `CLIENT KILL` | 2.4.0 |
+| `CLIENT LIST` | 2.4.0 |
+| `CLIENT NO-EVICT` | 7.0.0 |
+| `CLIENT NO-TOUCH` | 7.2.0 |
+| `CLIENT PAUSE` | 3.0.0 |
+| `CLIENT REPLY` | 3.2.0 |
+| `CLIENT SETINFO` | 7.2.0 |
+| `CLIENT SETNAME` | 2.6.9 |
+| `CLIENT TRACKING` | 6.0.0 |
+| `CLIENT TRACKINGINFO` | 6.2.0 |
+| `CLIENT UNBLOCK` | 5.0.0 |
+| `CLIENT UNPAUSE` | 6.2.0 |
+| `COMMAND` | 2.8.13 |
+| `COMMAND COUNT` | 2.8.13 |
+| `COMMAND DOCS` | 7.0.0 |
+| `COMMAND GETKEYS` | 2.8.13 |
+| `COMMAND GETKEYSANDFLAGS` | 7.0.0 |
+| `COMMAND HELP` | 5.0.0 |
+| `COMMAND INFO` | 2.8.13 |
+| `COMMAND LIST` | 7.0.0 |
+| `ECHO` | 1.0.0 |
+| `HELLO` | 6.0.0 |
+| `PING` | 1.0.0 |
+| `QUIT` | 1.0.0 |
+| `READONLY` | 3.0.0 |
+| `READWRITE` | 3.0.0 |
+| `RESET` | 6.2.0 |
+| `SELECT` | 1.0.0 |
+| `WAIT` | 3.0.0 |
+| `WAITAOF` | 7.2.0 |
+
+## `@transaction`
+
+**5 commands** (Redis 8.6.3 — `Since: <X.Y.Z>` filters for older targets).
+
+| Command | Since |
+|---------|-------|
+| `DISCARD` | 2.0.0 |
+| `EXEC` | 1.2.0 |
+| `MULTI` | 1.2.0 |
+| `UNWATCH` | 2.2.0 |
+| `WATCH` | 2.2.0 |
+
+## `@scripting`
+
+**21 commands** (Redis 8.6.3 — `Since: <X.Y.Z>` filters for older targets).
+
+| Command | Since |
+|---------|-------|
+| `EVAL` | 2.6.0 |
+| `EVALSHA` | 2.6.0 |
+| `EVALSHA_RO` | 7.0.0 |
+| `EVAL_RO` | 7.0.0 |
+| `FCALL` | 7.0.0 |
+| `FCALL_RO` | 7.0.0 |
+| `FUNCTION DELETE` | 7.0.0 |
+| `FUNCTION DUMP` | 7.0.0 |
+| `FUNCTION FLUSH` | 7.0.0 |
+| `FUNCTION HELP` | 7.0.0 |
+| `FUNCTION KILL` | 7.0.0 |
+| `FUNCTION LIST` | 7.0.0 |
+| `FUNCTION LOAD` | 7.0.0 |
+| `FUNCTION RESTORE` | 7.0.0 |
+| `FUNCTION STATS` | 7.0.0 |
+| `SCRIPT DEBUG` | 3.2.0 |
+| `SCRIPT EXISTS` | 2.6.0 |
+| `SCRIPT FLUSH` | 2.6.0 |
+| `SCRIPT HELP` | 5.0.0 |
+| `SCRIPT KILL` | 2.6.0 |
+| `SCRIPT LOAD` | 2.6.0 |
+
+## `@admin`
+
+**92 commands** (Redis 8.6.3 — `Since: <X.Y.Z>` filters for older targets).
+
+| Command | Since |
+|---------|-------|
+| `ACL DELUSER` | 6.0.0 |
+| `ACL DRYRUN` | 7.0.0 |
+| `ACL GETUSER` | 6.0.0 |
+| `ACL LIST` | 6.0.0 |
+| `ACL LOAD` | 6.0.0 |
+| `ACL LOG` | 6.0.0 |
+| `ACL SAVE` | 6.0.0 |
+| `ACL SETUSER` | 6.0.0 |
+| `ACL USERS` | 6.0.0 |
+| `BGREWRITEAOF` | 1.0.0 |
+| `BGSAVE` | 1.0.0 |
+| `CLIENT KILL` | 2.4.0 |
+| `CLIENT LIST` | 2.4.0 |
+| `CLIENT NO-EVICT` | 7.0.0 |
+| `CLIENT PAUSE` | 3.0.0 |
+| `CLIENT UNBLOCK` | 5.0.0 |
+| `CLIENT UNPAUSE` | 6.2.0 |
+| `CLUSTER ADDSLOTS` | 3.0.0 |
+| `CLUSTER ADDSLOTSRANGE` | 7.0.0 |
+| `CLUSTER BUMPEPOCH` | 3.0.0 |
+| `CLUSTER COUNT-FAILURE-REPORTS` | 3.0.0 |
+| `CLUSTER DELSLOTS` | 3.0.0 |
+| `CLUSTER DELSLOTSRANGE` | 7.0.0 |
+| `CLUSTER FAILOVER` | 3.0.0 |
+| `CLUSTER FLUSHSLOTS` | 3.0.0 |
+| `CLUSTER FORGET` | 3.0.0 |
+| `CLUSTER MEET` | 3.0.0 |
+| `CLUSTER MIGRATION` | 8.4.0 |
+| `CLUSTER REPLICAS` | 5.0.0 |
+| `CLUSTER REPLICATE` | 3.0.0 |
+| `CLUSTER RESET` | 3.0.0 |
+| `CLUSTER SAVECONFIG` | 3.0.0 |
+| `CLUSTER SET-CONFIG-EPOCH` | 3.0.0 |
+| `CLUSTER SETSLOT` | 3.0.0 |
+| `CLUSTER SLAVES` | 3.0.0 |
+| `CLUSTER SYNCSLOTS` | 8.4.0 |
+| `CONFIG GET` | 2.0.0 |
+| `CONFIG RESETSTAT` | 2.0.0 |
+| `CONFIG REWRITE` | 2.8.0 |
+| `CONFIG SET` | 2.0.0 |
+| `DEBUG` | 1.0.0 |
+| `FAILOVER` | 6.2.0 |
+| `HOTKEYS GET` | 8.6.0 |
+| `HOTKEYS RESET` | 8.6.0 |
+| `HOTKEYS START` | 8.6.0 |
+| `HOTKEYS STOP` | 8.6.0 |
+| `LASTSAVE` | 1.0.0 |
+| `LATENCY DOCTOR` | 2.8.13 |
+| `LATENCY GRAPH` | 2.8.13 |
+| `LATENCY HISTOGRAM` | 7.0.0 |
+| `LATENCY HISTORY` | 2.8.13 |
+| `LATENCY LATEST` | 2.8.13 |
+| `LATENCY RESET` | 2.8.13 |
+| `MODULE LIST` | 4.0.0 |
+| `MODULE LOAD` | 4.0.0 |
+| `MODULE LOADEX` | 7.0.0 |
+| `MODULE UNLOAD` | 4.0.0 |
+| `MONITOR` | 1.0.0 |
+| `PFDEBUG` | 2.8.9 |
+| `PFSELFTEST` | 2.8.9 |
+| `PSYNC` | 2.8.0 |
+| `REPLCONF` | 3.0.0 |
+| `REPLICAOF` | 5.0.0 |
+| `ROLE` | 2.8.12 |
+| `SAVE` | 1.0.0 |
+| `SENTINEL` | 2.8.4 |
+| `SENTINEL CKQUORUM` | 2.8.4 |
+| `SENTINEL CONFIG` | 6.2.0 |
+| `SENTINEL DEBUG` | 7.0.0 |
+| `SENTINEL FAILOVER` | 2.8.4 |
+| `SENTINEL FLUSHCONFIG` | 2.8.4 |
+| `SENTINEL GET-MASTER-ADDR-BY-NAME` | 2.8.4 |
+| `SENTINEL INFO-CACHE` | 3.2.0 |
+| `SENTINEL IS-MASTER-DOWN-BY-ADDR` | 2.8.4 |
+| `SENTINEL MASTER` | 2.8.4 |
+| `SENTINEL MASTERS` | 2.8.4 |
+| `SENTINEL MONITOR` | 2.8.4 |
+| `SENTINEL MYID` | 6.2.0 |
+| `SENTINEL PENDING-SCRIPTS` | 2.8.4 |
+| `SENTINEL REMOVE` | 2.8.4 |
+| `SENTINEL REPLICAS` | 5.0.0 |
+| `SENTINEL RESET` | 2.8.4 |
+| `SENTINEL SENTINELS` | 2.8.4 |
+| `SENTINEL SET` | 2.8.4 |
+| `SENTINEL SIMULATE-FAILURE` | 3.2.0 |
+| `SENTINEL SLAVES` | 2.8.0 |
+| `SHUTDOWN` | 1.0.0 |
+| `SLAVEOF` | 1.0.0 |
+| `SLOWLOG GET` | 2.2.12 |
+| `SLOWLOG LEN` | 2.2.12 |
+| `SLOWLOG RESET` | 2.2.12 |
+| `SYNC` | 1.0.0 |
+
+## `@dangerous`
+
+**14 commands** (Redis 8.6.3 — `Since: <X.Y.Z>` filters for older targets).
+
+| Command | Since |
+|---------|-------|
+| `FLUSHALL` | 1.0.0 |
+| `FLUSHDB` | 1.0.0 |
+| `INFO` | 1.0.0 |
+| `KEYS` | 1.0.0 |
+| `LASTSAVE` | 1.0.0 |
+| `MIGRATE` | 2.6.0 |
+| `RESTORE` | 2.6.0 |
+| `RESTORE-ASKING` | 3.0.0 |
+| `ROLE` | 2.8.12 |
+| `SFLUSH` | 8.0.0 |
+| `SORT` | 1.0.0 |
+| `SORT_RO` | 7.0.0 |
+| `SWAPDB` | 4.0.0 |
+| `TRIMSLOTS` | 8.4.0 |
+
+## `@blocking`
+
+**12 commands** (Redis 8.6.3 — `Since: <X.Y.Z>` filters for older targets).
+
+| Command | Since |
+|---------|-------|
+| `BLMOVE` | 6.2.0 |
+| `BLMPOP` | 7.0.0 |
+| `BLPOP` | 2.0.0 |
+| `BRPOP` | 2.0.0 |
+| `BRPOPLPUSH` | 2.2.0 |
+| `BZMPOP` | 7.0.0 |
+| `BZPOPMAX` | 5.0.0 |
+| `BZPOPMIN` | 5.0.0 |
+| `WAIT` | 3.0.0 |
+| `WAITAOF` | 7.2.0 |
+| `XREAD` | 5.0.0 |
+| `XREADGROUP` | 5.0.0 |
+
+## `@fast`
+
+**117 commands** (Redis 8.6.3 — `Since: <X.Y.Z>` filters for older targets).
+
+| Command | Since |
+|---------|-------|
+| `APPEND` | 2.0.0 |
+| `ASKING` | 3.0.0 |
+| `AUTH` | 1.0.0 |
+| `BITFIELD_RO` | 6.0.0 |
+| `BZPOPMAX` | 5.0.0 |
+| `BZPOPMIN` | 5.0.0 |
+| `DBSIZE` | 1.0.0 |
+| `DECR` | 1.0.0 |
+| `DECRBY` | 1.0.0 |
+| `DELEX` | 8.4.0 |
+| `DIGEST` | 8.4.0 |
+| `DISCARD` | 2.0.0 |
+| `ECHO` | 1.0.0 |
+| `EXISTS` | 1.0.0 |
+| `EXPIRE` | 1.0.0 |
+| `EXPIREAT` | 1.2.0 |
+| `EXPIRETIME` | 7.0.0 |
+| `GET` | 1.0.0 |
+| `GETBIT` | 2.2.0 |
+| `GETDEL` | 6.2.0 |
+| `GETEX` | 6.2.0 |
+| `GETSET` | 1.0.0 |
+| `HDEL` | 2.0.0 |
+| `HELLO` | 6.0.0 |
+| `HEXISTS` | 2.0.0 |
+| `HEXPIRE` | 7.4.0 |
+| `HEXPIREAT` | 7.4.0 |
+| `HEXPIRETIME` | 7.4.0 |
+| `HGET` | 2.0.0 |
+| `HGETDEL` | 8.0.0 |
+| `HGETEX` | 8.0.0 |
+| `HINCRBY` | 2.0.0 |
+| `HINCRBYFLOAT` | 2.6.0 |
+| `HLEN` | 2.0.0 |
+| `HMGET` | 2.0.0 |
+| `HMSET` | 2.0.0 |
+| `HPERSIST` | 7.4.0 |
+| `HPEXPIRE` | 7.4.0 |
+| `HPEXPIREAT` | 7.4.0 |
+| `HPEXPIRETIME` | 7.4.0 |
+| `HPTTL` | 7.4.0 |
+| `HSET` | 2.0.0 |
+| `HSETEX` | 8.0.0 |
+| `HSETNX` | 2.0.0 |
+| `HSTRLEN` | 3.2.0 |
+| `HTTL` | 7.4.0 |
+| `INCR` | 1.0.0 |
+| `INCRBY` | 1.0.0 |
+| `INCRBYFLOAT` | 2.6.0 |
+| `LASTSAVE` | 1.0.0 |
+| `LLEN` | 1.0.0 |
+| `LOLWUT` | 5.0.0 |
+| `LPOP` | 1.0.0 |
+| `LPUSH` | 1.0.0 |
+| `LPUSHX` | 2.2.0 |
+| `MGET` | 1.0.0 |
+| `MOVE` | 1.0.0 |
+| `MULTI` | 1.2.0 |
+| `PERSIST` | 2.2.0 |
+| `PEXPIRE` | 2.6.0 |
+| `PEXPIREAT` | 2.6.0 |
+| `PEXPIRETIME` | 7.0.0 |
+| `PFADD` | 2.8.9 |
+| `PING` | 1.0.0 |
+| `PTTL` | 2.6.0 |
+| `PUBLISH` | 2.0.0 |
+| `QUIT` | 1.0.0 |
+| `READONLY` | 3.0.0 |
+| `READWRITE` | 3.0.0 |
+| `RENAMENX` | 1.0.0 |
+| `RESET` | 6.2.0 |
+| `ROLE` | 2.8.12 |
+| `RPOP` | 1.0.0 |
+| `RPUSH` | 1.0.0 |
+| `RPUSHX` | 2.2.0 |
+| `SADD` | 1.0.0 |
+| `SCARD` | 1.0.0 |
+| `SELECT` | 1.0.0 |
+| `SETNX` | 1.0.0 |
+| `SISMEMBER` | 1.0.0 |
+| `SMISMEMBER` | 6.2.0 |
+| `SMOVE` | 1.0.0 |
+| `SPOP` | 1.0.0 |
+| `SPUBLISH` | 7.0.0 |
+| `SREM` | 1.0.0 |
+| `STRLEN` | 2.2.0 |
+| `SWAPDB` | 4.0.0 |
+| `TIME` | 2.6.0 |
+| `TOUCH` | 3.2.1 |
+| `TTL` | 1.0.0 |
+| `TYPE` | 1.0.0 |
+| `UNLINK` | 4.0.0 |
+| `UNWATCH` | 2.2.0 |
+| `WATCH` | 2.2.0 |
+| `XACK` | 5.0.0 |
+| `XACKDEL` | 8.2.0 |
+| `XADD` | 5.0.0 |
+| `XAUTOCLAIM` | 6.2.0 |
+| `XCFGSET` | 8.6.0 |
+| `XCLAIM` | 5.0.0 |
+| `XDEL` | 5.0.0 |
+| `XDELEX` | 8.2.0 |
+| `XIDMPRECORD` | 8.6.2 |
+| `XLEN` | 5.0.0 |
+| `XSETID` | 5.0.0 |
+| `ZADD` | 1.2.0 |
+| `ZCARD` | 1.2.0 |
+| `ZCOUNT` | 2.0.0 |
+| `ZINCRBY` | 1.2.0 |
+| `ZLEXCOUNT` | 2.8.9 |
+| `ZMSCORE` | 6.2.0 |
+| `ZPOPMAX` | 5.0.0 |
+| `ZPOPMIN` | 5.0.0 |
+| `ZRANK` | 2.0.0 |
+| `ZREM` | 1.2.0 |
+| `ZREVRANK` | 2.0.0 |
+| `ZSCORE` | 1.2.0 |
+
+## `@slow`
+
+**305 commands** (Redis 8.6.3 — `Since: <X.Y.Z>` filters for older targets).
+
+| Command | Since |
+|---------|-------|
+| `ACL` | 6.0.0 |
+| `ACL CAT` | 6.0.0 |
+| `ACL DELUSER` | 6.0.0 |
+| `ACL DRYRUN` | 7.0.0 |
+| `ACL GENPASS` | 6.0.0 |
+| `ACL GETUSER` | 6.0.0 |
+| `ACL HELP` | 6.0.0 |
+| `ACL LIST` | 6.0.0 |
+| `ACL LOAD` | 6.0.0 |
+| `ACL LOG` | 6.0.0 |
+| `ACL SAVE` | 6.0.0 |
+| `ACL SETUSER` | 6.0.0 |
+| `ACL USERS` | 6.0.0 |
+| `ACL WHOAMI` | 6.0.0 |
+| `BGREWRITEAOF` | 1.0.0 |
+| `BGSAVE` | 1.0.0 |
+| `BITCOUNT` | 2.6.0 |
+| `BITFIELD` | 3.2.0 |
+| `BITOP` | 2.6.0 |
+| `BITPOS` | 2.8.7 |
+| `BLMOVE` | 6.2.0 |
+| `BLMPOP` | 7.0.0 |
+| `BLPOP` | 2.0.0 |
+| `BRPOP` | 2.0.0 |
+| `BRPOPLPUSH` | 2.2.0 |
+| `BZMPOP` | 7.0.0 |
+| `CLIENT` | 2.4.0 |
+| `CLIENT CACHING` | 6.0.0 |
+| `CLIENT GETNAME` | 2.6.9 |
+| `CLIENT GETREDIR` | 6.0.0 |
+| `CLIENT HELP` | 5.0.0 |
+| `CLIENT ID` | 5.0.0 |
+| `CLIENT INFO` | 6.2.0 |
+| `CLIENT KILL` | 2.4.0 |
+| `CLIENT LIST` | 2.4.0 |
+| `CLIENT NO-EVICT` | 7.0.0 |
+| `CLIENT NO-TOUCH` | 7.2.0 |
+| `CLIENT PAUSE` | 3.0.0 |
+| `CLIENT REPLY` | 3.2.0 |
+| `CLIENT SETINFO` | 7.2.0 |
+| `CLIENT SETNAME` | 2.6.9 |
+| `CLIENT TRACKING` | 6.0.0 |
+| `CLIENT TRACKINGINFO` | 6.2.0 |
+| `CLIENT UNBLOCK` | 5.0.0 |
+| `CLIENT UNPAUSE` | 6.2.0 |
+| `CLUSTER` | 3.0.0 |
+| `CLUSTER ADDSLOTS` | 3.0.0 |
+| `CLUSTER ADDSLOTSRANGE` | 7.0.0 |
+| `CLUSTER BUMPEPOCH` | 3.0.0 |
+| `CLUSTER COUNT-FAILURE-REPORTS` | 3.0.0 |
+| `CLUSTER COUNTKEYSINSLOT` | 3.0.0 |
+| `CLUSTER DELSLOTS` | 3.0.0 |
+| `CLUSTER DELSLOTSRANGE` | 7.0.0 |
+| `CLUSTER FAILOVER` | 3.0.0 |
+| `CLUSTER FLUSHSLOTS` | 3.0.0 |
+| `CLUSTER FORGET` | 3.0.0 |
+| `CLUSTER GETKEYSINSLOT` | 3.0.0 |
+| `CLUSTER HELP` | 5.0.0 |
+| `CLUSTER INFO` | 3.0.0 |
+| `CLUSTER KEYSLOT` | 3.0.0 |
+| `CLUSTER LINKS` | 7.0.0 |
+| `CLUSTER MEET` | 3.0.0 |
+| `CLUSTER MIGRATION` | 8.4.0 |
+| `CLUSTER MYID` | 3.0.0 |
+| `CLUSTER MYSHARDID` | 7.2.0 |
+| `CLUSTER NODES` | 3.0.0 |
+| `CLUSTER REPLICAS` | 5.0.0 |
+| `CLUSTER REPLICATE` | 3.0.0 |
+| `CLUSTER RESET` | 3.0.0 |
+| `CLUSTER SAVECONFIG` | 3.0.0 |
+| `CLUSTER SET-CONFIG-EPOCH` | 3.0.0 |
+| `CLUSTER SETSLOT` | 3.0.0 |
+| `CLUSTER SHARDS` | 7.0.0 |
+| `CLUSTER SLAVES` | 3.0.0 |
+| `CLUSTER SLOT-STATS` | 8.2.0 |
+| `CLUSTER SLOTS` | 3.0.0 |
+| `CLUSTER SYNCSLOTS` | 8.4.0 |
+| `COMMAND` | 2.8.13 |
+| `COMMAND COUNT` | 2.8.13 |
+| `COMMAND DOCS` | 7.0.0 |
+| `COMMAND GETKEYS` | 2.8.13 |
+| `COMMAND GETKEYSANDFLAGS` | 7.0.0 |
+| `COMMAND HELP` | 5.0.0 |
+| `COMMAND INFO` | 2.8.13 |
+| `COMMAND LIST` | 7.0.0 |
+| `CONFIG` | 2.0.0 |
+| `CONFIG GET` | 2.0.0 |
+| `CONFIG HELP` | 5.0.0 |
+| `CONFIG RESETSTAT` | 2.0.0 |
+| `CONFIG REWRITE` | 2.8.0 |
+| `CONFIG SET` | 2.0.0 |
+| `COPY` | 6.2.0 |
+| `DEBUG` | 1.0.0 |
+| `DEL` | 1.0.0 |
+| `DUMP` | 2.6.0 |
+| `EVAL` | 2.6.0 |
+| `EVALSHA` | 2.6.0 |
+| `EVALSHA_RO` | 7.0.0 |
+| `EVAL_RO` | 7.0.0 |
+| `EXEC` | 1.2.0 |
+| `FAILOVER` | 6.2.0 |
+| `FCALL` | 7.0.0 |
+| `FCALL_RO` | 7.0.0 |
+| `FLUSHALL` | 1.0.0 |
+| `FLUSHDB` | 1.0.0 |
+| `FUNCTION` | 7.0.0 |
+| `FUNCTION DELETE` | 7.0.0 |
+| `FUNCTION DUMP` | 7.0.0 |
+| `FUNCTION FLUSH` | 7.0.0 |
+| `FUNCTION HELP` | 7.0.0 |
+| `FUNCTION KILL` | 7.0.0 |
+| `FUNCTION LIST` | 7.0.0 |
+| `FUNCTION LOAD` | 7.0.0 |
+| `FUNCTION RESTORE` | 7.0.0 |
+| `FUNCTION STATS` | 7.0.0 |
+| `GEOADD` | 3.2.0 |
+| `GEODIST` | 3.2.0 |
+| `GEOHASH` | 3.2.0 |
+| `GEOPOS` | 3.2.0 |
+| `GEORADIUS` | 3.2.0 |
+| `GEORADIUSBYMEMBER` | 3.2.0 |
+| `GEORADIUSBYMEMBER_RO` | 3.2.10 |
+| `GEORADIUS_RO` | 3.2.10 |
+| `GEOSEARCH` | 6.2.0 |
+| `GEOSEARCHSTORE` | 6.2.0 |
+| `GETRANGE` | 2.4.0 |
+| `HGETALL` | 2.0.0 |
+| `HKEYS` | 2.0.0 |
+| `HOTKEYS` | 8.6.0 |
+| `HOTKEYS GET` | 8.6.0 |
+| `HOTKEYS HELP` | 8.6.1 |
+| `HOTKEYS RESET` | 8.6.0 |
+| `HOTKEYS START` | 8.6.0 |
+| `HOTKEYS STOP` | 8.6.0 |
+| `HRANDFIELD` | 6.2.0 |
+| `HSCAN` | 2.8.0 |
+| `HVALS` | 2.0.0 |
+| `INFO` | 1.0.0 |
+| `KEYS` | 1.0.0 |
+| `LATENCY` | 2.8.13 |
+| `LATENCY DOCTOR` | 2.8.13 |
+| `LATENCY GRAPH` | 2.8.13 |
+| `LATENCY HELP` | 2.8.13 |
+| `LATENCY HISTOGRAM` | 7.0.0 |
+| `LATENCY HISTORY` | 2.8.13 |
+| `LATENCY LATEST` | 2.8.13 |
+| `LATENCY RESET` | 2.8.13 |
+| `LCS` | 7.0.0 |
+| `LINDEX` | 1.0.0 |
+| `LINSERT` | 2.2.0 |
+| `LMOVE` | 6.2.0 |
+| `LMPOP` | 7.0.0 |
+| `LPOS` | 6.0.6 |
+| `LRANGE` | 1.0.0 |
+| `LREM` | 1.0.0 |
+| `LSET` | 1.0.0 |
+| `LTRIM` | 1.0.0 |
+| `MEMORY` | 4.0.0 |
+| `MEMORY DOCTOR` | 4.0.0 |
+| `MEMORY HELP` | 4.0.0 |
+| `MEMORY MALLOC-STATS` | 4.0.0 |
+| `MEMORY PURGE` | 4.0.0 |
+| `MEMORY STATS` | 4.0.0 |
+| `MEMORY USAGE` | 4.0.0 |
+| `MIGRATE` | 2.6.0 |
+| `MODULE` | 4.0.0 |
+| `MODULE HELP` | 5.0.0 |
+| `MODULE LIST` | 4.0.0 |
+| `MODULE LOAD` | 4.0.0 |
+| `MODULE LOADEX` | 7.0.0 |
+| `MODULE UNLOAD` | 4.0.0 |
+| `MONITOR` | 1.0.0 |
+| `MSET` | 1.0.1 |
+| `MSETEX` | 8.4.0 |
+| `MSETNX` | 1.0.1 |
+| `OBJECT` | 2.2.3 |
+| `OBJECT ENCODING` | 2.2.3 |
+| `OBJECT FREQ` | 4.0.0 |
+| `OBJECT HELP` | 6.2.0 |
+| `OBJECT IDLETIME` | 2.2.3 |
+| `OBJECT REFCOUNT` | 2.2.3 |
+| `PFCOUNT` | 2.8.9 |
+| `PFDEBUG` | 2.8.9 |
+| `PFMERGE` | 2.8.9 |
+| `PFSELFTEST` | 2.8.9 |
+| `PSETEX` | 2.6.0 |
+| `PSUBSCRIBE` | 2.0.0 |
+| `PSYNC` | 2.8.0 |
+| `PUBSUB` | 2.8.0 |
+| `PUBSUB CHANNELS` | 2.8.0 |
+| `PUBSUB HELP` | 6.2.0 |
+| `PUBSUB NUMPAT` | 2.8.0 |
+| `PUBSUB NUMSUB` | 2.8.0 |
+| `PUBSUB SHARDCHANNELS` | 7.0.0 |
+| `PUBSUB SHARDNUMSUB` | 7.0.0 |
+| `PUNSUBSCRIBE` | 2.0.0 |
+| `RANDOMKEY` | 1.0.0 |
+| `RENAME` | 1.0.0 |
+| `REPLCONF` | 3.0.0 |
+| `REPLICAOF` | 5.0.0 |
+| `RESTORE` | 2.6.0 |
+| `RESTORE-ASKING` | 3.0.0 |
+| `RPOPLPUSH` | 1.2.0 |
+| `SAVE` | 1.0.0 |
+| `SCAN` | 2.8.0 |
+| `SCRIPT` | 2.6.0 |
+| `SCRIPT DEBUG` | 3.2.0 |
+| `SCRIPT EXISTS` | 2.6.0 |
+| `SCRIPT FLUSH` | 2.6.0 |
+| `SCRIPT HELP` | 5.0.0 |
+| `SCRIPT KILL` | 2.6.0 |
+| `SCRIPT LOAD` | 2.6.0 |
+| `SDIFF` | 1.0.0 |
+| `SDIFFSTORE` | 1.0.0 |
+| `SENTINEL` | 2.8.4 |
+| `SENTINEL CKQUORUM` | 2.8.4 |
+| `SENTINEL CONFIG` | 6.2.0 |
+| `SENTINEL DEBUG` | 7.0.0 |
+| `SENTINEL FAILOVER` | 2.8.4 |
+| `SENTINEL FLUSHCONFIG` | 2.8.4 |
+| `SENTINEL GET-MASTER-ADDR-BY-NAME` | 2.8.4 |
+| `SENTINEL HELP` | 6.2.0 |
+| `SENTINEL INFO-CACHE` | 3.2.0 |
+| `SENTINEL IS-MASTER-DOWN-BY-ADDR` | 2.8.4 |
+| `SENTINEL MASTER` | 2.8.4 |
+| `SENTINEL MASTERS` | 2.8.4 |
+| `SENTINEL MONITOR` | 2.8.4 |
+| `SENTINEL MYID` | 6.2.0 |
+| `SENTINEL PENDING-SCRIPTS` | 2.8.4 |
+| `SENTINEL REMOVE` | 2.8.4 |
+| `SENTINEL REPLICAS` | 5.0.0 |
+| `SENTINEL RESET` | 2.8.4 |
+| `SENTINEL SENTINELS` | 2.8.4 |
+| `SENTINEL SET` | 2.8.4 |
+| `SENTINEL SIMULATE-FAILURE` | 3.2.0 |
+| `SENTINEL SLAVES` | 2.8.0 |
+| `SET` | 1.0.0 |
+| `SETBIT` | 2.2.0 |
+| `SETEX` | 2.0.0 |
+| `SETRANGE` | 2.2.0 |
+| `SFLUSH` | 8.0.0 |
+| `SHUTDOWN` | 1.0.0 |
+| `SINTER` | 1.0.0 |
+| `SINTERCARD` | 7.0.0 |
+| `SINTERSTORE` | 1.0.0 |
+| `SLAVEOF` | 1.0.0 |
+| `SLOWLOG` | 2.2.12 |
+| `SLOWLOG GET` | 2.2.12 |
+| `SLOWLOG HELP` | 6.2.0 |
+| `SLOWLOG LEN` | 2.2.12 |
+| `SLOWLOG RESET` | 2.2.12 |
+| `SMEMBERS` | 1.0.0 |
+| `SORT` | 1.0.0 |
+| `SORT_RO` | 7.0.0 |
+| `SRANDMEMBER` | 1.0.0 |
+| `SSCAN` | 2.8.0 |
+| `SSUBSCRIBE` | 7.0.0 |
+| `SUBSCRIBE` | 2.0.0 |
+| `SUBSTR` | 1.0.0 |
+| `SUNION` | 1.0.0 |
+| `SUNIONSTORE` | 1.0.0 |
+| `SUNSUBSCRIBE` | 7.0.0 |
+| `SYNC` | 1.0.0 |
+| `TRIMSLOTS` | 8.4.0 |
+| `UNSUBSCRIBE` | 2.0.0 |
+| `WAIT` | 3.0.0 |
+| `WAITAOF` | 7.2.0 |
+| `XGROUP` | 5.0.0 |
+| `XGROUP CREATE` | 5.0.0 |
+| `XGROUP CREATECONSUMER` | 6.2.0 |
+| `XGROUP DELCONSUMER` | 5.0.0 |
+| `XGROUP DESTROY` | 5.0.0 |
+| `XGROUP HELP` | 5.0.0 |
+| `XGROUP SETID` | 5.0.0 |
+| `XINFO` | 5.0.0 |
+| `XINFO CONSUMERS` | 5.0.0 |
+| `XINFO GROUPS` | 5.0.0 |
+| `XINFO HELP` | 5.0.0 |
+| `XINFO STREAM` | 5.0.0 |
+| `XPENDING` | 5.0.0 |
+| `XRANGE` | 5.0.0 |
+| `XREAD` | 5.0.0 |
+| `XREADGROUP` | 5.0.0 |
+| `XREVRANGE` | 5.0.0 |
+| `XTRIM` | 5.0.0 |
+| `ZDIFF` | 6.2.0 |
+| `ZDIFFSTORE` | 6.2.0 |
+| `ZINTER` | 6.2.0 |
+| `ZINTERCARD` | 7.0.0 |
+| `ZINTERSTORE` | 2.0.0 |
+| `ZMPOP` | 7.0.0 |
+| `ZRANDMEMBER` | 6.2.0 |
+| `ZRANGE` | 1.2.0 |
+| `ZRANGEBYLEX` | 2.8.9 |
+| `ZRANGEBYSCORE` | 1.0.5 |
+| `ZRANGESTORE` | 6.2.0 |
+| `ZREMRANGEBYLEX` | 2.8.9 |
+| `ZREMRANGEBYRANK` | 2.0.0 |
+| `ZREMRANGEBYSCORE` | 1.2.0 |
+| `ZREVRANGE` | 1.2.0 |
+| `ZREVRANGEBYLEX` | 2.8.9 |
+| `ZREVRANGEBYSCORE` | 2.2.0 |
+| `ZSCAN` | 2.8.0 |
+| `ZUNION` | 6.2.0 |
+| `ZUNIONSTORE` | 2.0.0 |
 
 ---
 
-## Module categories
+## Regenerating this map
 
-These categories **only exist on the live server if the corresponding module is loaded.** Common Enterprise / Redis Stack deployments load several. **Always verify via `ACL CAT @<module-category>` against the live server** — this section is a guide, not authoritative.
+```bash
+# From the repo root:
+./scripts/build-category-map.py > skills/redis-acl-patterns/references/command-category-map.md
+```
 
-### `@json` (RedisJSON)
-
-**Commands (typical):** `JSON.SET`, `JSON.GET`, `JSON.DEL`, `JSON.FORGET`, `JSON.MGET`, `JSON.MSET`, `JSON.NUMINCRBY`, `JSON.NUMMULTBY`, `JSON.STRAPPEND`, `JSON.STRLEN`, `JSON.ARRAPPEND`, `JSON.ARRINDEX`, `JSON.ARRINSERT`, `JSON.ARRLEN`, `JSON.ARRPOP`, `JSON.ARRTRIM`, `JSON.OBJKEYS`, `JSON.OBJLEN`, `JSON.RESP`, `JSON.TYPE`, `JSON.CLEAR`, `JSON.TOGGLE`, `JSON.DEBUG`
-
-In Redis 8 core, JSON commands also contribute to `@read`/`@write` standard categories. On Redis 7 with RedisJSON loaded, they only appear in `@json`.
-
-### `@search` (RediSearch)
-
-**Commands (typical):** `FT.CREATE`, `FT.ALTER`, `FT.DROPINDEX`, `FT.SEARCH`, `FT.AGGREGATE`, `FT.PROFILE`, `FT.EXPLAIN`, `FT.EXPLAINCLI`, `FT.INFO`, `FT._LIST`, `FT.CONFIG`, `FT.SPELLCHECK`, `FT.DICTADD`, `FT.DICTDEL`, `FT.DICTDUMP`, `FT.SYNUPDATE`, `FT.SYNDUMP`, `FT.SUGADD`, `FT.SUGGET`, `FT.SUGDEL`, `FT.SUGLEN`, `FT.TAGVALS`, `FT.MGET`, `FT.CURSOR`
-
-### `@timeseries` (RedisTimeSeries)
-
-**Commands (typical):** `TS.CREATE`, `TS.ALTER`, `TS.DEL`, `TS.ADD`, `TS.MADD`, `TS.INCRBY`, `TS.DECRBY`, `TS.CREATERULE`, `TS.DELETERULE`, `TS.RANGE`, `TS.REVRANGE`, `TS.MRANGE`, `TS.MREVRANGE`, `TS.GET`, `TS.MGET`, `TS.INFO`, `TS.QUERYINDEX`
-
-### `@bf` (RedisBloom — Bloom Filters)
-
-**Commands (typical):** `BF.RESERVE`, `BF.ADD`, `BF.MADD`, `BF.INSERT`, `BF.EXISTS`, `BF.MEXISTS`, `BF.SCANDUMP`, `BF.LOADCHUNK`, `BF.INFO`, `BF.CARD`
-
-### `@cf` (RedisBloom — Cuckoo Filters)
-
-**Commands (typical):** `CF.RESERVE`, `CF.ADD`, `CF.ADDNX`, `CF.INSERT`, `CF.INSERTNX`, `CF.EXISTS`, `CF.MEXISTS`, `CF.DEL`, `CF.COUNT`, `CF.SCANDUMP`, `CF.LOADCHUNK`, `CF.INFO`
-
-### `@cms` (RedisBloom — Count-Min Sketch)
-
-**Commands (typical):** `CMS.INITBYDIM`, `CMS.INITBYPROB`, `CMS.INCRBY`, `CMS.QUERY`, `CMS.MERGE`, `CMS.INFO`
-
-### `@topk` (RedisBloom — Top-K)
-
-**Commands (typical):** `TOPK.RESERVE`, `TOPK.ADD`, `TOPK.INCRBY`, `TOPK.QUERY`, `TOPK.COUNT`, `TOPK.LIST`, `TOPK.INFO`
-
-### `@tdigest` (RedisBloom — t-digest)
-
-**Commands (typical):** `TDIGEST.CREATE`, `TDIGEST.RESET`, `TDIGEST.ADD`, `TDIGEST.MERGE`, `TDIGEST.MIN`, `TDIGEST.MAX`, `TDIGEST.QUANTILE`, `TDIGEST.CDF`, `TDIGEST.TRIMMED_MEAN`, `TDIGEST.RANK`, `TDIGEST.REVRANK`, `TDIGEST.INFO`
-
-### `@graph` (RedisGraph — deprecated)
-
-RedisGraph reached end-of-life in early 2024. If a deployment still loads it, commands include `GRAPH.QUERY`, `GRAPH.RO_QUERY`, `GRAPH.PROFILE`, `GRAPH.EXPLAIN`, `GRAPH.DELETE`, `GRAPH.LIST`, `GRAPH.CONFIG`, `GRAPH.SLOWLOG`. Avoid recommending `@graph` for new rules.
-
----
-
-## Notes for the >50% rule
-
-When deciding whether to collapse `+CMD1 +CMD2 +CMD3` to `+@category`:
-
-1. **Count what's in the category**: use this map's lists, adjusted for the target Redis version per `version-deltas.md`. (Live `ACL CAT @<category>` via `redis-cli` is more authoritative if the user has shell access to verify.)
-2. **Count what the service uses** in that category (from the discovery phase).
-3. **If used / total > 50%**: this is a collapse opportunity → ask the user (per `acl-generator` step 3).
-4. **Else**: emit individual command grants.
-
-Some commands appear in **multiple categories** (e.g., `XADD` is in both `@write` and `@stream`). Count each category independently — a service using `XADD` contributes 1 to `@write`'s usage and 1 to `@stream`'s usage.
-
----
-
-## When this map is wrong, fix it
-
-This document is approximate. If a deployment's live `ACL CAT @<category>` (run via `redis-cli`) differs materially from what's here — especially on Redis 8 or with modules loaded — trust the live answer and update this map. Live ACL inspection via the official `redis/mcp-redis` MCP server is not currently supported (see SUBMISSION_NOTE.md item #1).
+The script downloads the source tarball for the pinned Redis tag, extracts `src/commands/*.json`, and rebuilds this document. Bump the pinned tag in the script's header to regenerate for a different Redis release.
