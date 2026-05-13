@@ -69,6 +69,19 @@ channel_patterns: {&notifications}
 
 If you find a strong inference signal — e.g., a comment `# TODO: add subscribe`, or `r.publish` is used heavily but `r.subscribe` is conspicuously absent — **note it as a question**, do NOT bake it into the rule. You will surface these in step 3.
 
+#### 2g. Flag uncertain method→command mappings
+
+The skill's `client-library-patterns.md` documents method-to-command mappings based on each library's documented API and the convention that method name = Redis command name. **This convention holds for most simple-CRUD usage but breaks for several real cases.** When you encounter any of the following, record it for surfacing in the agent's final output (step 6) as a "Mapping notes" line:
+
+- **Scripting helpers** (`r.eval()`, `Redlock`, lock libraries, `redis.NewScript().Run()`): typically emit both `EVAL` and `EVALSHA` (client switches transparently after first call). ACL needs both grants.
+- **Locking helpers** (`r.lock()` in redis-py, distributed-lock recipes, `redlock-py`, `bull` queue locks): use `SET key NX PX ttl` for acquire + `EVAL` for atomic release.
+- **Subcommand-named methods** (`r.client_setname`, `r.object_encoding`, `r.config_get`, `r.cluster_info`, `r.memory_usage`, `r.script_load`): map to subcommands at the wire level. ACL granularity is at top-level command — `+CLIENT` covers all `CLIENT` subcommands, or use `+CLIENT|SETNAME` for sub-granularity.
+- **Pipeline `exec()` with transactional mode** (default in redis-py `r.pipeline()`, ioredis `client.multi()`, go-redis `rdb.TxPipeline()`): adds `MULTI`/`EXEC`/`WATCH` → `@transaction`.
+- **Sentinel / Cluster client mode** (`redis.sentinel.Sentinel`, `new Redis.Cluster([...])`, `redis.NewClusterClient`): implicit `SENTINEL *` / `CLUSTER *` commands at the infrastructure layer. These are typically `@admin` — should NOT be granted to application users.
+- **Sharded pub/sub** on Redis Cluster: may issue `SSUBSCRIBE`/`SUNSUBSCRIBE`/`SPUBLISH` alongside the standard pub/sub commands. Grant `+@pubsub` (covers both).
+
+For absolute certainty on any flagged call, recommend the user run `MONITOR` against a test instance while executing the code path. v1 doesn't automate this; surface it as a suggestion in the output.
+
 ### 3. Ask the user (batched, before synthesis)
 
 After discovery, ask these questions **in a single batched prompt**. Do not synthesize until the user answers.
@@ -187,6 +200,7 @@ Type `apply` to apply this rule against the MCP-connected Redis. You'll see a sa
 - **Target Redis version:** 7.x (asked)
 - **Defense-in-depth denies:** {included / not included} (asked)
 - **MCP status:** {connected — categories confirmed via `ACL CAT` / **not connected** — without an MCP connection, live category verification and the `apply` workflow (safety-gated provisioning + impersonation test) aren't available. The rule is generated from the baked command-category map. Type `apply` for one-step MCP setup, or see README §MCP setup.}
+- **Mapping notes:** {No ambiguous mappings detected / **N call site(s) flagged for verification**: [list each, e.g., "service.py:42 (`r.eval(...)`) — likely emits both EVAL and EVALSHA"]. For absolute certainty, run `MONITOR` against a test Redis while executing the flagged paths. See skill reference `client-library-patterns.md` §Caveats for details.}
 ````
 
 #### 6b. Enterprise output
@@ -224,6 +238,7 @@ Then create or attach the ACL Rule to a **Role**, and assign the Role to a **Use
 - **Target Redis version:** 7.x (asked — this is the *database* version; cluster-version-aware feature gating is future work)
 - **Defense-in-depth denies:** {included / not included} (asked)
 - **MCP status:** {connected — read-side context (`ACL CAT`, `ACL LIST`, `ACL WHOAMI`) queried / **not connected** — without an MCP connection, live category verification against the target server isn't available, so the rule is generated from the baked command-category map. (Note: `apply` is not supported on Enterprise regardless of MCP — Enterprise ACLs are applied via admin UI or REST API.) See README §MCP setup to enable live verification.}
+- **Mapping notes:** {No ambiguous mappings detected / **N call site(s) flagged for verification**: [list each]. For absolute certainty, run `MONITOR` against a test Redis while executing the flagged paths. See skill reference `client-library-patterns.md` §Caveats for details.}
 ````
 
 ### 7. (Optional, OSS only) Apply — with safety gate

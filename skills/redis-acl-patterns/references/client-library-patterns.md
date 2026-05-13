@@ -256,6 +256,97 @@ Don't rely on variable names alone — verify with the import. A variable named 
 
 ---
 
+## Caveats — where the convention breaks
+
+The "method name = Redis command name" convention covers most simple-CRUD usage but breaks for several real cases. When the agent encounters any of these, it must **flag for verification** (or recommend the user run `MONITOR` to confirm wire-level commands). This document's mappings are based on each library's documented API, not on first-party source review or wire-level observation.
+
+### Scripting helpers issue both `EVAL` and `EVALSHA`
+
+Most clients have a "smart" eval helper that:
+
+1. First call: sends `EVAL <script> ...`
+2. Subsequent calls: may switch to `EVALSHA <sha1> ...` (after the script is cached server-side)
+3. On `NOSCRIPT` error: falls back to `EVAL`
+
+**ACL implication:** `+EVAL` alone is **not** enough. Need `+EVAL +EVALSHA` (or `+@scripting` on Redis 7+, or `+@write` on Redis 6). Same goes for the read-only variants `EVAL_RO` / `EVALSHA_RO`.
+
+Affected helpers:
+
+- redis-py: `r.eval(...)`, `r.evalsha(...)`
+- ioredis: `client.eval(...)`, scripts defined via `client.defineCommand({lua: "..."})`
+- go-redis: `redis.NewScript("...").Run(ctx, rdb, ...)`
+
+### Locking helpers use `SET` + `EVAL` internally
+
+`r.lock(name)` (redis-py), the `redlock` family of libraries, and bespoke distributed-lock helpers typically:
+
+- **Acquire**: `SET key value NX PX ttl`
+- **Release**: `EVAL <atomic-check-and-delete-script> ...`
+
+**ACL implication:** Grant `+SET +EVAL +EVALSHA` (plus the lock-key pattern in `~`). A user with `+SET` alone gets a lock helper that can acquire but can't release.
+
+### Subcommand-named methods
+
+Redis commands like `CLIENT`, `OBJECT`, `CONFIG`, `CLUSTER`, `MEMORY`, `SCRIPT`, `FUNCTION` have many subcommands. Clients expose them with underscore-separated method names that mask the subcommand structure:
+
+| Method | Wire-level command |
+|--------|--------------------|
+| `r.client_setname("x")` (redis-py) | `CLIENT SETNAME x` |
+| `r.client_getname()` | `CLIENT GETNAME` |
+| `r.object_encoding(key)` | `OBJECT ENCODING key` |
+| `r.config_get("maxmemory")` | `CONFIG GET maxmemory` |
+| `r.config_set(...)` | `CONFIG SET` |
+| `r.cluster_info()` | `CLUSTER INFO` |
+| `r.memory_usage(key)` | `MEMORY USAGE key` |
+| `r.script_load(script)` | `SCRIPT LOAD script` |
+
+**ACL implication:** ACL granularity is at the top-level command. `+CLIENT` allows all `CLIENT` subcommands; for tighter scope, use `+CLIENT|SETNAME` syntax. Note that the top-level commands like `CONFIG`, `CLUSTER`, `MEMORY`, `DEBUG`, `ACL` are usually in `@admin` / `@dangerous` — be deliberate about granting them.
+
+### Pipeline `exec()` may issue `MULTI` / `EXEC`
+
+Most clients have a transactional-pipeline mode that wraps the buffered calls in `MULTI` and `EXEC`:
+
+- **redis-py**: `r.pipeline()` defaults to `transaction=True` → wraps in `MULTI`/`EXEC`. Pass `transaction=False` for a plain pipeline.
+- **ioredis**: `client.multi().exec()` is transactional. `client.pipeline().exec()` is non-transactional.
+- **go-redis**: `rdb.TxPipeline()` is transactional. `rdb.Pipeline()` is non-transactional.
+
+**ACL implication:** If transactional pipelines are used, the rule needs `MULTI`, `EXEC`, plus optionally `WATCH`/`UNWATCH`/`DISCARD` (the `@transaction` category covers them all). Non-transactional pipelines don't need this.
+
+### Sentinel / Cluster client mode
+
+When the application uses a Sentinel-aware client (`redis.sentinel.Sentinel`) or a Cluster-aware client (`new Redis.Cluster([...])`, `redis.NewClusterClient(...)`), the client itself issues `SENTINEL *` or `CLUSTER *` commands beyond what application code references.
+
+**ACL implication:** These commands are typically `@admin` and should NOT be granted to application users — they're handled by infrastructure-level credentials. If the application code path doesn't explicitly call admin commands but uses a Sentinel/Cluster client, the application's ACL should still NOT include `+@admin` or `+SENTINEL`/`+CLUSTER`.
+
+### Sharded pub/sub on Redis Cluster
+
+On Redis Cluster, sharded pub/sub uses `SSUBSCRIBE`/`SUNSUBSCRIBE`/`SPUBLISH` (Redis 7+) which is shard-local rather than cluster-wide. Some clients switch transparently when the connection is to a cluster.
+
+**ACL implication:** Grant `+@pubsub` (covers all pub/sub variants) rather than individual `+SUBSCRIBE` if cluster mode is involved.
+
+### Scan iterators
+
+Helpers like `r.scan_iter(match="user:*")` (redis-py), `client.scanStream(...)` (ioredis), and `rdb.Scan(ctx, ...).Iterator()` (go-redis) issue multiple `SCAN` calls in a loop.
+
+**ACL implication:** `+SCAN` is sufficient; the iteration is client-side. This case is mentioned for completeness — it's not actually a convention break.
+
+---
+
+## For absolute certainty: `MONITOR`
+
+When the agent cannot be confident in a method-to-command mapping — or when the user wants to verify before locking in a rule — the authoritative answer is **`MONITOR`**, Redis's built-in command-stream debugger.
+
+Workflow (manual today):
+
+1. Connect a `redis-cli` client to a **test instance** of Redis (never production — `MONITOR` is very chatty)
+2. Run `MONITOR` in that client
+3. Execute the service code path in question
+4. Observe the actual wire-level commands
+
+v1 of the plugin doesn't automate this. **Future work**: with the Redis MCP connected, the agent could run `MONITOR` itself against a user-specified test target while the user triggers the code path, capture the command stream, and use it to disambiguate the flagged calls. That'd close the loop on "can this be known with absolute certainty without reviewing source code." For now: ask, flag, suggest `MONITOR`.
+
+---
+
 ## When the client isn't covered here
 
 For Java (`jedis`, `lettuce`), Rust (`redis-rs`, `fred`), .NET (`StackExchange.Redis`), Ruby (`redis-rb`), PHP (`predis`, `phpredis`), the typical convention holds: method name (case-normalized) = Redis command. When in doubt, ASK the user — a 30-second clarification is cheaper than an incorrect rule.
