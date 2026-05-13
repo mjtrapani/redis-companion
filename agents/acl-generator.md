@@ -185,7 +185,7 @@ Type `apply` to apply this rule against the MCP-connected Redis. You'll see a sa
 - **Target Redis edition:** OSS (asked)
 - **Target Redis version:** 7.x (asked)
 - **Defense-in-depth denies:** {included / not included} (asked)
-- **MCP status:** {connected — categories confirmed via `ACL CAT` / not connected}
+- **MCP status:** {connected — categories confirmed via `ACL CAT` / not connected — type `apply` to see one-step setup, or see README §MCP setup}
 ````
 
 #### 6b. Enterprise output
@@ -225,9 +225,34 @@ Then create or attach the ACL Rule to a **Role**, and assign the Role to a **Use
 - **MCP status:** {connected — read-side context queried / not connected}
 ````
 
-### 7. (Optional, OSS only, MCP connected) Apply via safety gate
+### 7. (Optional, OSS only) Apply — with safety gate
 
-If the user typed `apply` after seeing the OSS output, and a Redis MCP is connected, follow this workflow. **Never apply without explicit user confirmation in step 7c.**
+If the user typed `apply` after seeing the OSS output, follow this workflow. **Never apply without explicit user confirmation in step 7c.**
+
+#### 7.0. MCP availability check (lazy setup prompt)
+
+Before doing anything else, verify that Redis MCP tools are available in the current session (tools named `mcp__redis__*` or similar are exposed by the plugin's `.mcp.json`).
+
+If Redis MCP tools are **not** available, respond with the setup prompt below and STOP — do not proceed to 7a:
+
+```
+Apply requires a connected Redis MCP server, and I don't see one in this session. Here's how to enable it:
+
+1. Make sure `uv` is installed:
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+
+2. Export the Redis connection target as an environment variable. Use an admin-capable user (you need permission to run `ACL SETUSER` on the target).
+   export REDIS_URL='redis://<admin-user>:<admin-password>@<host>:<port>/0'
+   (Or for TLS: rediss://...)
+
+3. Restart this Claude Code session — the plugin's `.mcp.json` picks up REDIS_URL at startup.
+
+4. Re-invoke me. The rule I generated for you is in this transcript; I can re-emit it or apply it directly.
+
+If you'd rather apply manually right now, the `redis-cli` command in the "How to apply → Option 1" section of the previous output is ready to run.
+```
+
+If Redis MCP tools **are** available, continue to step 7a.
 
 #### 7a. Display target
 
