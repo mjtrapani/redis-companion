@@ -16,9 +16,9 @@ For Redis OSS / Redis Cloud direct-connect, it emits a full `ACL SETUSER` comman
 
 - Redis ACL syntax is powerful but cryptic. Translating "this service reads from `cache:user:*`, publishes to `notifications`, and writes a stream" into a correct ACL DSL is a real cognitive load.
 - Rules drift between Redis 6 / 7 / 8 — `@scripting` was split out of `@write` in 7, module commands joined `@read`/`@write` in 8, pub/sub default-deny flipped on.
-- Neither Redis OS nor Redis Enterprise has a low-friction interface for constructing custom ACL rules from intent. Developers ship with the `default` user because the alternative is too much work.
+- Neither Redis OSS nor Redis Enterprise has a low-friction interface for constructing custom ACL rules from intent. Developers ship with the `default` user because the alternative is too much work.
 
-This plugin removes that friction. It reads the code, derives the intent, and emits an annotated rule the user can apply directly or paste into Enterprise's admin UI.
+This plugin grew out of [Redis ACL Builder](https://github.com/markotrapani/redis-acl-builder) — a manual GUI tool built to address the same problem. `redis-companion` takes the next step: instead of helping you construct a rule by hand, it reads your code and derives the intent automatically.
 
 ## Install in under 5 minutes
 
@@ -43,19 +43,9 @@ cd redis-companion
 claude --plugin-dir .
 ```
 
-To verify either install, in the Claude Code prompt:
+To verify either install, run `/agents` in the Claude Code prompt — you should see `acl-generator` in the list.
 
-```
-/agents
-```
-
-You should see `acl-generator` in the list. And:
-
-```
-say something Redis-adjacent — like "what does +@read grant in Redis 7?"
-```
-
-You should see the `redis-acl-patterns` skill auto-load and inform Claude's answer.
+You can also confirm the skill is active by asking something Redis-adjacent, like *"what does `+@read` grant in Redis 7?"* — the `redis-acl-patterns` skill should auto-load and inform the answer.
 
 ## Try the demo
 
@@ -70,13 +60,13 @@ In Claude Code:
 The agent will:
 
 1. Detect `redis-py` from the imports + `requirements.txt`
-2. Find the key patterns (`cache:user:*`, `session:*`), the pub/sub channel (`notifications`), and the stream (`activity:events`)
+2. Find the key patterns (`cache:user:*`, `session:*`), the stream key (`activity:events`), and the pub/sub channel (`notifications`)
 3. Inventory the commands: `SET`, `GET`, `MGET`, `SETEX`, `PUBLISH`, `XADD`
 4. Ask you for: target Redis **edition** (OSS / Enterprise), target Redis **major version** (6 / 7 / 8), **defense-in-depth deny** preference, and **permission granularity** (strict / balanced / brevity)
 5. Emit something like:
 
 ```
-ACL SETUSER my-service-user on >REPLACE_WITH_PASSWORD ~cache:user:* ~session:* &notifications +GET +MGET +SET +SETEX +PUBLISH +XADD
+ACL SETUSER my-service-user on >REPLACE_WITH_PASSWORD ~cache:user:* ~session:* ~activity:events &notifications +GET +MGET +SET +SETEX +PUBLISH +XADD
 ```
 
 …with a per-clause annotation table citing the source lines that justified each grant, plus instructions on how to apply (`ACL SETUSER` for OSS, "paste into an ACL Rule body" for Enterprise).
@@ -99,21 +89,16 @@ The plugin works fully without an MCP connection. With one, you get three additi
 
 ### Setup
 
-The plugin ships `.mcp.json` pre-wired to [`redis/mcp-redis`](https://github.com/redis/mcp-redis), the official Redis MCP server. To activate:
+The MCP server is pre-wired in `plugin.json` and starts automatically when `REDIS_URL` is set. No additional tools need to be installed.
 
 ```bash
-# 1. Install uv (one-time): https://docs.astral.sh/uv/getting-started/installation/
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# 2. Set REDIS_URL — point at the target Redis using an admin-capable user
+# Point at your target Redis using an admin-capable user
 export REDIS_URL='redis://default:<password>@localhost:6379/0'
-# For local dev with no password: redis://localhost:6379
-
-# 3. Restart Claude Code
-claude --plugin-dir .
+# For local dev with no auth:
+export REDIS_URL='redis://localhost:6379'
 ```
 
-After restart, `mcp__redis__*` tools will be available, the agent will use them automatically when relevant, and `apply` will be enabled in OSS output.
+Then restart Claude Code. After restart, `mcp__redis__*` tools will be available, the agent will use them automatically when relevant, and `apply` will be enabled in OSS output.
 
 ### About the `/doctor` warning
 
@@ -124,6 +109,28 @@ If you launch the plugin without setting `REDIS_URL`, `/doctor` shows:
 This is **expected and benign** — the plugin's skill, agent, and hook all work without MCP. The warning just says the optional Redis MCP server can't auto-start without `REDIS_URL`. Set it (above) and the warning goes away.
 
 ## How it works
+
+```mermaid
+flowchart TD
+    U([User]) -->|"/redis-companion:analyze path\nor conversational prompt"| A
+
+    subgraph Plugin["redis-companion"]
+        A[acl-generator agent] --> B[Load redis-acl-patterns skill]
+        B --> C[Scan service directory\nDetect client library\nInventory commands · key patterns\nchannels · streams]
+        C --> D{MCP connected?}
+        D -->|Yes| E[INFO SERVER · ACL CAT\nACL LIST inspection]
+        D -->|No| F[Use skill reference data]
+        E --> G[Ask user: edition · version\ngranularity · defense-in-depth]
+        F --> G
+        G --> H[Synthesize ACL rule\nApply version deltas\nCategory collapse where >50%]
+        H --> I[Emit annotated output\nper-clause source citations]
+        I --> J{OSS + MCP?}
+        J -->|Yes| K["Safety-gated apply\nACL SETUSER → verify → validate"]
+        J -->|No| L[Manual apply instructions]
+    end
+
+    I --> U
+```
 
 The plugin is four cooperating components, each doing one job:
 
@@ -142,7 +149,7 @@ Task executor, in `agents/acl-generator.md`. Read-only filesystem access (Write/
 
 ### Hook: `credential-guard`
 
-PreToolUse hook on Write / Edit / MultiEdit, in `hooks/`. Blocks file writes that contain literal Redis credentials — `REDIS_PASS=` with a real value, `redis://user:pw@host`, or `redis-cli -a <pw>`. Recognized placeholders (`REPLACE_WITH_PASSWORD`, `<password>`, `${REDIS_PASS}`, etc.) pass through, so the agent's own output isn't blocked. Defense-in-depth for the local working directory — separate from the live-server safety gate.
+PreToolUse hook on Write / Edit / MultiEdit, in `hooks/`. Blocks file writes that contain literal Redis credentials — connection strings with embedded passwords, `REDIS_PASS=` set to a real value, or `redis-cli -a <password>` invocations. Recognized placeholders (`REPLACE_WITH_PASSWORD`, `<password>`, `${REDIS_PASS}`, etc.) pass through, so the agent's own output isn't blocked. Defense-in-depth for the local working directory — separate from the live-server safety gate.
 
 ### MCP config
 
@@ -150,39 +157,32 @@ Declared in `plugin.json`, wires the Redis MCP server (`redis/mcp-redis`) using 
 
 ## Limitations
 
-The agent **always asks** for these because they can't be inferred reliably:
+The agent **always asks** for the target Redis **major version** (6 / 7 / 8) — package files reveal client library version, not server version.
 
-- **Target Redis edition** (OSS vs Enterprise). No command-only fingerprint definitively identifies Enterprise — `INFO` heuristics are probabilistic, not authoritative.
-- **Target Redis major version.** Package files reveal client library version, not server version.
+For the target **edition** (OSS vs Enterprise): without an MCP connection the agent always asks, since there's no way to inspect the server. With MCP, `INFO SERVER` surfaces strong signals — `redis_mode: cluster` and "Redis Enterprise" in the version/build strings are definitive on most deployments — but the agent still confirms rather than silently assuming, since field values can vary by deployment.
 
 The agent **flags but doesn't silently bake** these:
 
 - **Client method → Redis command mappings** for non-CRUD usage (scripting helpers, locks, subcommand-named methods, transactional pipelines, Sentinel/Cluster client mode, sharded pub/sub). The convention "method name = command name" holds for ~90% of calls but breaks for the rest. The agent surfaces flagged calls in its output and recommends `MONITOR` against a test instance for absolute certainty.
 - **Inferred grants from comments** (e.g., a `# TODO: add scripting` near pubsub code). Surfaced as a question; never baked in.
 
-The agent **doesn't do these in v1**:
-
-- **Generate Redis Enterprise REST API JSON payloads** or make the API call. Enterprise output is the rule body only — paste into the admin UI or REST API yourself.
-- **Automate `MONITOR` for client-mapping disambiguation.** Suggested manually when ambiguity is flagged.
-- **Multi-client / multi-language analysis in a single pass.** If your codebase has both `redis-py` and `go-redis`, the agent asks you which to focus on first and handles one at a time.
-- **Apply ACLs on Redis Enterprise.** Direct `ACL SETUSER` is blocked at the cluster level; Enterprise ACL writes flow through the cluster manager REST API, which the plugin doesn't call.
-
 ## What's next
 
 The biggest future-work items:
 
 - **Execute Enterprise provisioning end-to-end** — generate the REST API JSON payload and make the call, either by extending the Redis Cloud admin MCP (which today scopes to subscription/infra, not ACL/user/role) or by having the agent make raw Enterprise REST API calls.
+- **Multi-client / multi-language analysis in a single pass.** If a codebase uses both `redis-py` and `go-redis`, v1 asks which to focus on first and handles one at a time. A future pass could merge the inventories and union the resulting ACL clauses.
 - **MCP-driven `MONITOR` for client-mapping verification** — when an ambiguous client method is flagged, run `MONITOR` against a user-specified test target, capture the actual wire commands, and use those to disambiguate. Closes the loop on "can this be known without reviewing client source."
-- **Module command coverage** — `@json` (RedisJSON), `@search` (RediSearch), `@timeseries`, Bloom filter family. First-class in most Enterprise deployments.
+- **Module client-library detection** — the skill's category reference already covers `@json`, `@search`, `@timeseries`, and the Bloom filter family, but the agent has no client-method mappings for module APIs (`r.json().set(...)`, `client.ft().search(...)`). Adding those mappings closes the gap for Enterprise deployments that load Redis Stack modules.
 - **Database-scoped ACLs** for multi-tenant Enterprise — Enterprise lets ACLs be scoped per-database; v1 treats the target as a single ACL surface.
 - **`ACL LOG`-driven denial diagnosis** — inverse of the v1 workflow: read the audit trail of recent ACL denials, group them, and suggest minimal additions to unblock the application.
 - **Auto-fix mode** — rewrite detected anti-patterns in place (`r.keys("user:*")` → `r.scan_iter(match="user:*")`), with a dry-run default.
 
 ## Credits
 
-This plugin's predecessor is **[Redis ACL Builder](https://github.com/markotrapani/redis-acl-builder)** (MIT) — an Electron GUI I shipped last year after watching Redis support tickets pile up about ACL syntax confusion. The Builder helped manually. `redis-companion` removes the manual step: an agent that reads the code, derives the intent, and emits the rule.
-
 MCP integration uses [`redis/mcp-redis`](https://github.com/redis/mcp-redis), the official general-purpose Redis MCP server.
+
+The command-category reference data in this plugin's skill was originally developed for [Redis ACL Builder](https://github.com/markotrapani/redis-acl-builder) (mentioned above).
 
 ## License
 
