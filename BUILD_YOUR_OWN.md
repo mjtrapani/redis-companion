@@ -71,7 +71,7 @@ Same shape, different domain. Each one is a real plugin idea you could ship in a
 
 ## The fast path: bootstrap with Claude
 
-If you'd rather have Claude walk you through the fork than work through the manual steps below, **see [BOOTSTRAP_PROMPT.md](./BOOTSTRAP_PROMPT.md)**. It's a copy-pasteable prompt that:
+If you'd rather have Claude walk you through the fork than work through the manual steps below, **see [`docs/BOOTSTRAP_PROMPT.md`](./docs/BOOTSTRAP_PROMPT.md)**. It's a copy-pasteable prompt that:
 
 1. Asks you targeted questions about your domain (persona, artifact, syntax, what's inferable from code, credential shapes, MCP availability)
 2. Then proposes the file-by-file changes — and is instructed to push back when it'd be guessing

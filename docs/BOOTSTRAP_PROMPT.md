@@ -1,6 +1,6 @@
 # Bootstrap prompt: fork redis-companion into your domain's plugin
 
-This is a prompt you can paste into Claude Code to have it walk you through forking `redis-companion` into a plugin for your own domain. Instead of working through the six fork steps in [BUILD_YOUR_OWN.md](./BUILD_YOUR_OWN.md) by hand, Claude will ask you targeted questions about your workflow first, then propose the file-by-file changes — and let you push back where you have domain expertise it doesn't.
+This is a prompt you can paste into Claude Code to have it walk you through forking `redis-companion` into a plugin for your own domain. Instead of working through the six fork steps in [BUILD_YOUR_OWN.md](../BUILD_YOUR_OWN.md) by hand, Claude will ask you targeted questions about your workflow first, then propose the file-by-file changes — and let you push back where you have domain expertise it doesn't.
 
 ## How to use it
 
@@ -53,9 +53,9 @@ After I've answered, walk me through the fork file-by-file:
 ## What to expect
 
 - **It'll take a few rounds.** Claude will ask questions, you'll answer, it'll propose changes, you'll correct or refine. The first pass won't be perfect.
-- **You'll catch errors.** That's the point. Claude tends to default to confident drafts that look right but are subtly under-sourced. Catching that is exactly what your domain expertise is for — see the [*"pick a domain you can steer Claude in as a peer"*](./BUILD_YOUR_OWN.md#before-you-start-pick-a-domain-you-can-steer-claude-in-as-a-peer) section of the guide.
+- **You'll catch errors.** That's the point. Claude tends to default to confident drafts that look right but are subtly under-sourced. Catching that is exactly what your domain expertise is for — see the [*"pick a domain you can steer Claude in as a peer"*](../BUILD_YOUR_OWN.md#before-you-start-pick-a-domain-you-can-steer-claude-in-as-a-peer) section of the guide.
 - **Some parts won't transfer.** redis-companion has specific patterns (the version-deltas concept, the speculation-candidate question, the `commands.json`-derived category map) that may not have analogs in your domain. Drop what doesn't apply.
 
 ## When to read the long-form guide instead
 
-If Claude proposes something and you don't understand *why* redis-companion does it that way, switch to [BUILD_YOUR_OWN.md](./BUILD_YOUR_OWN.md) for the explanation. The bootstrap prompt is the shortcut; the guide is the reference.
+If Claude proposes something and you don't understand *why* redis-companion does it that way, switch to [BUILD_YOUR_OWN.md](../BUILD_YOUR_OWN.md) for the explanation. The bootstrap prompt is the shortcut; the guide is the reference.
