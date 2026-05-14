@@ -30,3 +30,6 @@ appendonly.aof
 # Local-only spec / assignment materials (not for publishing)
 # No trailing slash — must also match the symlink, not just a directory.
 .spec
+
+# Generated rule files (plugin writes these per service)
+acl-rule-*.md
