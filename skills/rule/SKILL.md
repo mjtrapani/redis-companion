@@ -215,7 +215,7 @@ ACL SETUSER <username> on ><changeme> <rest of rule>
 
 **Full details:** `./acl-rule-<username>.md` — open this file for per-term annotations, detected context, and apply patterns.
 
-**To apply** (the long rule line stays in the `.md` — you only copy a short command from this message):
+**Apply** (this one-liner reads the rule from the `.md` and applies it to your local Redis):
 
 **One-liner** (substitute password inline, then apply):
 
