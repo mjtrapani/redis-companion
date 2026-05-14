@@ -205,7 +205,7 @@ Do NOT re-emit the agent's full output to the user. The detailed view lives in t
 ```markdown
 ✅ Rule generated for `<username>` (Redis <edition> <version>, <N> commands, strict least-privilege)
 
-**The rule:**
+**`ACL SETUSER` command** (creates the user and grants the rule body in one shot):
 
 \`\`\`
 ACL SETUSER <username> on ><changeme> <rest of rule>
@@ -213,30 +213,22 @@ ACL SETUSER <username> on ><changeme> <rest of rule>
 
 **Full details:** `./acl-rule-<username>.md` — open this file for per-term annotations, detected context, and apply patterns.
 
-**Apply** (this one-liner reads the rule from the `.md` and applies it to your local Redis):
-
-**One-liner** (substitute password inline, then apply):
+**Apply** (substitute the password inline and pipe straight to `redis-cli` — for local nopass Redis use `nopass`, otherwise replace with `>YOUR_STRONG_PASSWORD`; for a remote target, append `-h <host> -p <port> --user <admin> --askpass`):
 
 \`\`\`
-sed 's/><changeme>/nopass/' ./acl-rule-<username>.md | grep -m1 '^ACL SETUSER' | redis-cli
+! sed 's/><changeme>/nopass/' ./acl-rule-<username>.md | grep -m1 '^ACL SETUSER' | redis-cli
 \`\`\`
-
-(Replace `nopass` with `>YOUR_STRONG_PASSWORD` for non-local Redis. For a remote target, add `-h <host> -p <port> --user <admin> --askpass` after `redis-cli`.)
-
-**Or two-step** if you prefer editing first:
-1. Open `./acl-rule-<username>.md`, replace `<changeme>` with your password (or change `><changeme>` to `nopass`).
-2. Run: \`grep -m1 '^ACL SETUSER' ./acl-rule-<username>.md | redis-cli\`
 
 **Verify the rule landed:**
 
 \`\`\`
-redis-cli ACL GETUSER <username>
+! redis-cli ACL GETUSER <username>
 \`\`\`
 
 **Smoke-test the service end-to-end** (this is the demo's strongest beat — apply the rule and prove the service still works under it):
 
 \`\`\`
-REDIS_URL='redis://<username>:@127.0.0.1:6379' python3 $ARGUMENTS/service.py
+! REDIS_URL='redis://<username>:@127.0.0.1:6379' python3 $ARGUMENTS/service.py
 \`\`\`
 
 (Note the trailing colon — `redis://user:@host` is the unambiguous nopass URL form. Plain `redis://user@host` confuses `redis-cli`/clients into using `user` as a password for `default`.) Expect `6/6 operations succeeded` if applicable. For a passworded apply, use `redis://<username>:${REDIS_PASS}@127.0.0.1:6379`.
@@ -244,13 +236,13 @@ REDIS_URL='redis://<username>:@127.0.0.1:6379' python3 $ARGUMENTS/service.py
 **Negative test** (confirm denies actually deny):
 
 \`\`\`
-redis-cli -u 'redis://<username>:@127.0.0.1:6379' FLUSHDB
+! redis-cli -u 'redis://<username>:@127.0.0.1:6379' FLUSHDB
 \`\`\`
 
 Expected: `(error) NOPERM User <username> has no permissions to run the 'flushdb' command`.
 ```
 
-The user copies the short paste-safe one-liners from the prompt — apply, verify, smoke-test, negative-test — each fits on one line. The rule itself is extracted by `grep` from the `.md` file, never copy-pasted from the prompt.
+The user copies the short paste-safe one-liners from the prompt — each starts with `!` so Claude Code runs it directly as a shell command on paste, no manual prefix needed. The rule itself is extracted by `grep` from the `.md` file, never copy-pasted from the prompt.
 
 **Important:** the smoke-test path assumes the analyzed directory contains a runnable `service.py` (true for the bundled `examples/sample-service/`). If the path doesn't have a `service.py` at its root (e.g., a multi-module service), substitute the actual entrypoint or omit the smoke-test block. The agent's discovery output tells you the actual entry-point file path — use that.
 
