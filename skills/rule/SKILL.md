@@ -184,26 +184,55 @@ Spawn the `acl-generator` agent with this prompt:
 >
 > Forbidden tools: any tool that reads or writes data; this phase is text-only synthesis from the inputs above.
 
-### After Phase 3 returns — re-emit the output AND write the rule to a file (CRITICAL UX steps)
+### After Phase 3 returns — write the .md AND emit a CONDENSED message (CRITICAL UX)
 
-Two things happen after synthesis returns:
+Long ACL rule lines get mangled by terminal copy-paste — word-wrap inserts hard line breaks, heredoc indentation breaks the `EOF` terminator, and shell-special characters (`~`, `*`, `&`, `>`) require careful quoting. The reliable solution is to **write the full output to a markdown file** and have the user apply it with a short extraction command. The user copies short commands from the prompt; the rule itself stays in the `.md`.
 
-**1. Write the rule to a file** (eliminates terminal copy-paste issues).
+**Step 1 — Write `./acl-rule-<username>.md` to the current working directory.**
 
-Long ACL rule lines get mangled by terminal copy-paste — word-wrap inserts hard line breaks, heredoc indentation breaks the `EOF` terminator, and shell-special characters (`~`, `*`, `&`, `>`) require careful quoting. The reliable solution is to write the rule to a file and have the user apply it with a short command: `redis-cli < <file>`.
+Use the `Write` tool to save the agent's full synthesis output (verbatim) to `./acl-rule-<username>.md` in cwd. This file contains everything: rule, per-term annotations, detected context, apply instructions, verify steps. It's the comprehensive deliverable — designed for review, audit trail, version control, future reference.
 
-Steps:
-1. Extract the `ACL SETUSER <username> on <auth> <rest>...` line from the agent's synthesis output (the first code block after the "ACL Command" heading).
-2. Use the `Write` tool to save just that line (no markdown fences, no commentary) to `./acl-rule-<username>.txt` in the current working directory.
-3. Tell the user the file was written and how to apply it with `redis-cli < ./acl-rule-<username>.txt`.
+Critical formatting requirement for grep-extraction to work later: the rule must appear on its own line starting with `ACL SETUSER ` (or the rule body for Enterprise). The agent's standard output template already puts the rule inside a fenced code block on its own line — preserve that exactly when writing the file.
 
-If `Write` fails or the user denies the permission prompt, fall back gracefully: tell the user the file write didn't happen and they'll need to use one of the in-message patterns (heredoc, single-line, or `users.acl` file) from the agent's "How to apply" section.
+If `Write` fails or the user denies the permission prompt, fall back: tell the user the file write didn't happen and surface the agent's full output inline as a fallback.
 
-**2. Re-emit the agent's full synthesis output as your own user-facing message.**
+**Step 2 — Emit a CONDENSED user-facing message.**
 
-The Task tool's return value is rendered as a **collapsed** sub-agent transcript in the user's UI. The user has to press a key combination (e.g., `Ctrl+O` in Claude Code) to expand and read it — easy to miss, and a poor demo experience.
+Do NOT re-emit the agent's full output to the user. The detailed view lives in the `.md` file. Your Claude Code message should be tight:
 
-Copy the agent's full response verbatim into your next message. Do not summarize, paraphrase, or wrap it in commentary above or below the output unless the user explicitly asks for one. Mention the file you wrote at the top (e.g., "**Rule written to `./acl-rule-<username>.txt`** — apply with `redis-cli < ./acl-rule-<username>.txt`"), then surface the full annotated output below.
+```markdown
+✅ Rule generated for `<username>` (Redis <edition> <version>, <N> commands, <granularity>)
+
+**The rule:**
+
+\`\`\`
+ACL SETUSER <username> on ><changeme> <rest of rule>
+\`\`\`
+
+**Full details:** `./acl-rule-<username>.md` — open this file for per-term annotations, detected context, and apply patterns.
+
+**To apply** (without copy-pasting the rule from this prompt):
+
+1. Edit `./acl-rule-<username>.md` to replace `<changeme>` with your actual password (or change `><changeme>` to `nopass` for local-dev Redis with no auth).
+
+2. Then run:
+
+   \`\`\`
+   grep -m1 '^ACL SETUSER' ./acl-rule-<username>.md | redis-cli
+   \`\`\`
+
+   (For a remote target, add the usual connection flags: `redis-cli -h <host> -p <port> --user <admin> --askpass`.)
+
+3. Verify:
+
+   \`\`\`
+   redis-cli ACL GETUSER <username>
+   \`\`\`
+```
+
+The user copies the `grep ... | redis-cli` command (short, paste-safe) and the `redis-cli ACL GETUSER` command from the prompt — both fit on one line and contain no shell-sensitive characters. The rule itself is extracted by `grep` from the `.md` file, never copy-pasted.
+
+If the user wants to see the per-term annotations or the full apply pattern alternatives, they `cat` the file or open it in an editor. The condensed prompt message tells them where to look.
 
 ---
 

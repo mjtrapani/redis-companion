@@ -169,6 +169,8 @@ Declared in `plugin.json`, wires the Redis MCP server (`redis/mcp-redis`) using 
 
 ## Limitations
 
+**Client-library coverage in v1.** The plugin documents detection patterns and method-to-command mappings for **`redis-py` (Python), `ioredis` (Node.js), and `go-redis` (Go)** — see `skills/acl-reference/references/client-library-patterns.md`. However, only `redis-py` has been **end-to-end tested** via the included `examples/sample-service/` fixture. The `ioredis` and `go-redis` patterns are derived from each library's published API but have not been exercised against a real codebase. If you run the plugin against a Node.js or Go service and the discovery output looks off, file an issue with a representative call site — the patterns are easy to refine once we see real usage.
+
 Without MCP, the agent always asks for the target Redis **major version** (6 / 7 / 8) — package files reveal client library version, not server version. With MCP, `INFO SERVER` provides the exact version, which the agent surfaces for confirmation rather than asking blindly.
 
 For the target **edition** (OSS vs Enterprise / Redis Cloud): the agent always asks. `INFO SERVER` is not a reliable signal — Redis Cloud sanitizes its output (`redis_build_id` is all zeros, `redis_mode` shows `standalone`) even on paid Enterprise tiers, and self-managed Redis Enterprise deployments vary. With MCP connected, `INFO SERVER` is used to surface the server **version** (which the user may not know off-hand), but never to infer edition.
