@@ -184,13 +184,26 @@ Spawn the `acl-generator` agent with this prompt:
 >
 > Forbidden tools: any tool that reads or writes data; this phase is text-only synthesis from the inputs above.
 
-### After Phase 3 returns — re-emit the output (CRITICAL UX step)
+### After Phase 3 returns — re-emit the output AND write the rule to a file (CRITICAL UX steps)
+
+Two things happen after synthesis returns:
+
+**1. Write the rule to a file** (eliminates terminal copy-paste issues).
+
+Long ACL rule lines get mangled by terminal copy-paste — word-wrap inserts hard line breaks, heredoc indentation breaks the `EOF` terminator, and shell-special characters (`~`, `*`, `&`, `>`) require careful quoting. The reliable solution is to write the rule to a file and have the user apply it with a short command: `redis-cli < <file>`.
+
+Steps:
+1. Extract the `ACL SETUSER <username> on <auth> <rest>...` line from the agent's synthesis output (the first code block after the "ACL Command" heading).
+2. Use the `Write` tool to save just that line (no markdown fences, no commentary) to `./acl-rule-<username>.txt` in the current working directory.
+3. Tell the user the file was written and how to apply it with `redis-cli < ./acl-rule-<username>.txt`.
+
+If `Write` fails or the user denies the permission prompt, fall back gracefully: tell the user the file write didn't happen and they'll need to use one of the in-message patterns (heredoc, single-line, or `users.acl` file) from the agent's "How to apply" section.
+
+**2. Re-emit the agent's full synthesis output as your own user-facing message.**
 
 The Task tool's return value is rendered as a **collapsed** sub-agent transcript in the user's UI. The user has to press a key combination (e.g., `Ctrl+O` in Claude Code) to expand and read it — easy to miss, and a poor demo experience.
 
-**You must re-emit the agent's full synthesis output as your own user-facing message**, copying the agent's response verbatim. Do not just rely on the Task tool's return being visible. Do not summarize, paraphrase, or wrap it in your own commentary above or below the output unless the user explicitly asks for one.
-
-Concretely: after the agent returns, your next message to the user should begin directly with the rule output (e.g., `# ACL Rule for <username> ...` or whatever heading the agent produced) and contain the full synthesis content. The agent's output is the deliverable — surface it cleanly.
+Copy the agent's full response verbatim into your next message. Do not summarize, paraphrase, or wrap it in commentary above or below the output unless the user explicitly asks for one. Mention the file you wrote at the top (e.g., "**Rule written to `./acl-rule-<username>.txt`** — apply with `redis-cli < ./acl-rule-<username>.txt`"), then surface the full annotated output below.
 
 ---
 

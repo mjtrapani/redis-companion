@@ -226,47 +226,43 @@ Replace `><changeme>` with your actual credential choice:
 
 ## How to apply
 
-**Why the form matters:** ACL rule terms contain characters that the shell treats specially — `>` (redirect), `~` (home expansion / glob anchor), `*` (glob), `&` (background). Pasting the rule as raw shell arguments fails: e.g., `redis-cli ACL SETUSER ... ~cache:user:*` produces `zsh: no matches found: ~cache:user:*` (zsh tries to glob it).
+**Why long-line copy-paste is unreliable:** ACL rule terms contain characters the shell treats specially — `>` (redirect), `~` (home expansion / glob anchor), `*` (glob), `&` (background). Terminal copy-paste compounds the problem: word-wrap inserts hard line breaks, heredoc paste strips/adds whitespace that breaks the `EOF` terminator, and rendered code blocks in Claude Code's UI sometimes preserve indentation. The reliable answer is to **write the rule to a file once and feed the file to `redis-cli`** — no shell parsing of the rule terms at all.
 
-Three patterns work — **HEREDOC is recommended** because it bypasses shell expansion entirely.
+### Pattern A — Apply from a file (recommended)
 
-### Pattern A — HEREDOC (recommended)
+The orchestrator skill has already written your rule to `./acl-rule-<username>.txt` in the current working directory. Apply it with one short command:
 
-Paste this as one block. The `<<'EOF'` (single-quoted delimiter) disables ALL shell expansion inside, so ACL terms go through to redis-cli verbatim:
+```bash
+redis-cli < ./acl-rule-<username>.txt
+```
+
+For a non-local target, add the usual connection flags:
+
+```bash
+redis-cli -h <host> -p <port> --user <admin> --askpass < ./acl-rule-<username>.txt
+```
+
+The file contains just the `ACL SETUSER` line — short enough to inspect with `cat ./acl-rule-<username>.txt` before applying.
+
+### Pattern B — HEREDOC piped to `redis-cli`
+
+Works in most terminals. The `<<'EOF'` (single-quoted delimiter) disables shell expansion inside, but the closing `EOF` must be at column zero — pastes that preserve indentation will hang the shell at `heredoc>`.
 
 ```bash
 redis-cli <<'EOF'
-ACL SETUSER <username> on <auth> resetkeys ~<key1> ~<key2> resetchannels &<chan> nocommands +<cmd1> +<cmd2> -@admin -@dangerous
+ACL SETUSER <username> on <auth> <rest of rule>
 EOF
 ```
 
-- For **local dev**: replace `<auth>` with `nopass`.
-- For **non-local with password**: replace `<auth>` with `>YOUR_STRONG_PASSWORD` (no quotes needed inside the heredoc).
-- For **non-local connection target**: add `-h <host> -p <port> --user <admin-user> --askpass` after `redis-cli`. The heredoc body stays the same.
-
-### Pattern B — Single-line, all special tokens single-quoted
-
-If you prefer a one-liner:
+### Pattern C — Single-line, all special tokens single-quoted
 
 ```bash
-redis-cli ACL SETUSER <username> on '<auth>' resetkeys '~<key1>' '~<key2>' resetchannels '&<chan>' nocommands +<cmd1> +<cmd2> '-@admin' '-@dangerous'
+redis-cli ACL SETUSER <username> on '<auth>' '~<key1>' '~<key2>' '&<chan>' '-@all' '-@admin' '-@dangerous' +<cmd1> +<cmd2>
 ```
 
-(`redis-cli` defaults to `127.0.0.1:6379` — add `-h <host> -p <port>` if connecting elsewhere. For an admin password, add `--user <admin> --askpass` so the password is prompted, not in shell history.)
+### Pattern D — `users.acl` file (for `aclfile`-configured deployments)
 
-### Pattern C — Multi-line with `\` continuation
-
-Works only if every shell-sensitive token is quoted. Falls between A and B in clarity:
-
-```bash
-redis-cli ACL SETUSER <username> \
-  on '<auth>' \
-  resetkeys '~<key1>' '~<key2>' \
-  resetchannels '&<chan>' \
-  nocommands \
-  +<cmd1> +<cmd2> \
-  '-@admin' '-@dangerous'
-```
+Append the rule (without the `ACL SETUSER` prefix; use the `user <username> ...` form) to your `aclfile`, then `redis-cli ACL LOAD`.
 
 ### Verify the rule applied correctly
 
@@ -274,7 +270,7 @@ redis-cli ACL SETUSER <username> \
 redis-cli ACL GETUSER <username>
 ```
 
-### Sanity-check (replace `<username>` and password if applicable)
+### Sanity-check
 
 ```bash
 # Should succeed (in-scope SET):
