@@ -211,23 +211,25 @@ ACL SETUSER <username> on ><changeme> <rest of rule>
 
 **Full details:** `./acl-rule-<username>.md` — open this file for per-term annotations, detected context, and apply patterns.
 
-**To apply** (without copy-pasting the rule from this prompt):
+**To apply** (no copy-paste of the rule from this prompt):
 
-1. Edit `./acl-rule-<username>.md` to replace `<changeme>` with your actual password (or change `><changeme>` to `nopass` for local-dev Redis with no auth).
+**One-liner** (substitute password inline, then apply):
 
-2. Then run:
+\`\`\`
+sed 's/><changeme>/nopass/' ./acl-rule-<username>.md | grep -m1 '^ACL SETUSER' | redis-cli
+\`\`\`
 
-   \`\`\`
-   grep -m1 '^ACL SETUSER' ./acl-rule-<username>.md | redis-cli
-   \`\`\`
+(Replace `nopass` with `>YOUR_STRONG_PASSWORD` for non-local Redis. For a remote target, add `-h <host> -p <port> --user <admin> --askpass` after `redis-cli`.)
 
-   (For a remote target, add the usual connection flags: `redis-cli -h <host> -p <port> --user <admin> --askpass`.)
+**Or two-step** if you prefer editing first:
+1. Open `./acl-rule-<username>.md`, replace `<changeme>` with your password (or change `><changeme>` to `nopass`).
+2. Run: \`grep -m1 '^ACL SETUSER' ./acl-rule-<username>.md | redis-cli\`
 
-3. Verify:
+**Verify:**
 
-   \`\`\`
-   redis-cli ACL GETUSER <username>
-   \`\`\`
+\`\`\`
+redis-cli ACL GETUSER <username>
+\`\`\`
 ```
 
 The user copies the `grep ... | redis-cli` command (short, paste-safe) and the `redis-cli ACL GETUSER` command from the prompt — both fit on one line and contain no shell-sensitive characters. The rule itself is extracted by `grep` from the `.md` file, never copy-pasted.

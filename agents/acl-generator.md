@@ -228,21 +228,36 @@ Replace `><changeme>` with your actual credential choice:
 
 **Why long-line copy-paste is unreliable:** ACL rule terms contain characters the shell treats specially — `>` (redirect), `~` (home expansion / glob anchor), `*` (glob), `&` (background). Terminal copy-paste compounds the problem: word-wrap inserts hard line breaks, heredoc paste strips/adds whitespace that breaks the `EOF` terminator, and rendered code blocks in Claude Code's UI sometimes preserve indentation. The reliable answer is to **write the rule to a file once and feed the file to `redis-cli`** — no shell parsing of the rule terms at all.
 
-### Pattern A — Apply from a file (recommended)
+### Pattern A — Apply from the `.md` file (recommended)
 
-The orchestrator skill has already written your rule to `./acl-rule-<username>.txt` in the current working directory. Apply it with one short command:
+The orchestrator skill has already written the full rule + annotations to `./acl-rule-<username>.md` in the current working directory. Two ways to apply:
+
+**A1. Edit-then-apply** — clean, predictable:
+
+1. Open `./acl-rule-<username>.md` in any editor.
+2. Replace `<changeme>` with your actual password — OR replace the entire `><changeme>` token with `nopass` for local-dev Redis with no auth. Save.
+3. Apply:
+   ```bash
+   grep -m1 '^ACL SETUSER' ./acl-rule-<username>.md | redis-cli
+   ```
+
+**A2. Inline substitution** — one-liner, no file edit needed:
 
 ```bash
-redis-cli < ./acl-rule-<username>.txt
+# Local-dev (nopass):
+sed 's/><changeme>/nopass/' ./acl-rule-<username>.md | grep -m1 '^ACL SETUSER' | redis-cli
+
+# Production (substitute a real password):
+sed 's/><changeme>/>YOUR_STRONG_PASSWORD/' ./acl-rule-<username>.md | grep -m1 '^ACL SETUSER' | redis-cli
 ```
 
-For a non-local target, add the usual connection flags:
+For a non-local target, add the usual connection flags to `redis-cli`:
 
 ```bash
-redis-cli -h <host> -p <port> --user <admin> --askpass < ./acl-rule-<username>.txt
+... | redis-cli -h <host> -p <port> --user <admin> --askpass
 ```
 
-The file contains just the `ACL SETUSER` line — short enough to inspect with `cat ./acl-rule-<username>.txt` before applying.
+Either A1 or A2 avoids copy-pasting the long rule line entirely — `grep` extracts it from the file, and `sed` (in A2) does the password substitution on-the-fly without the user touching the `.md`.
 
 ### Pattern B — HEREDOC piped to `redis-cli`
 
