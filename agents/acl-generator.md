@@ -1,6 +1,7 @@
 ---
 name: acl-generator
 description: Use when the user asks to generate, build, scope, infer, or review a Redis ACL for a backend service. Scans the codebase, infers access patterns from method calls and key/channel/stream literals, and synthesizes a least-privilege rule with per-term annotations. Operates in two modes — DISCOVERY (scan and return findings) and SYNTHESIS (take findings + user answers and emit rule). When a Redis MCP is connected, reads the exact server version from INFO SERVER. Interactive user questions are owned by the `rule` skill via `AskUserQuestion`, not by this agent.
+model: claude-sonnet-4-6
 disallowedTools: Write, Edit, NotebookEdit, Bash
 color: red
 ---
@@ -166,13 +167,17 @@ Your job: produce the final ACL rule with annotations and apply instructions. No
 
 #### S1. Map commands → categories using the upstream-derived map, filtered by exact version
 
-For each command in the discovery inventory, identify its categories using the skill's `command-category-map.md` (generated from `redis/redis@8.6.3/src/commands/*.json` — regeneratable via `scripts/build-category-map.py`).
+For each command in the discovery inventory, **explicitly look up its categories in the skill's `command-category-map.md`** (generated from `redis/redis@8.6.3/src/commands/*.json` — regeneratable via `scripts/build-category-map.py`). Read the actual file via the `Skill` tool or by reading the reference path directly — **do NOT infer categories from training data or first-principles reasoning about what the command does.** The map is the authoritative source.
 
-**Filter by exact version, not major version.** The synthesis prompt passes an *effective target version* like `8.6.3` (from `INFO SERVER` directly) or `7.4` (the latest minor assumed for a user who picked "Redis 7" with no MCP). Use that exact version as the cutoff:
+**Why this matters:** Training-data category recall is unreliable. A previous run hallucinated that `PUBLISH` is in `@write` because pub/sub "writes" to channels — but `PUBLISH` is in `@pubsub`, not `@write`, per upstream Redis source. A rule emitting `+@write` without `+@pubsub` (or without explicit `+PUBLISH`) silently fails on every publish call. Look up each command in the map; do not reason about what its category "should" be.
+
+The lookup is mechanical: find the command name in the map, list the categories its row appears in. Don't paraphrase, don't generalize. Build a `command → [categories]` table from the explicit map data before composing the rule.
+
+**Filter by exact version, not major version.** The synthesis prompt passes an *effective target version* like `8.6.3` (from `INFO SERVER` directly) or `7.4` (the user-supplied minor for the no-MCP path). Use that exact version as the cutoff:
 
 - A command with `Since: 7.4.0` is eligible only if the effective version `≥ 7.4.0`. So `HEXPIRE` (Since 7.4.0) is included for target `8.6.3` and `7.4` but excluded for `7.0` or `6.2`.
 - A command with `Since: 1.0.0` is eligible for every supported target.
-- If you grant a command unavailable on the target version, `ACL SETUSER` will reject the rule. So under-include rather than over-include when the version is uncertain.
+- If you grant a command unavailable on the target version, `ACL SETUSER` will reject the rule. Under-include rather than over-include when the version is uncertain.
 
 Apply cross-version category re-classifications from `version-deltas.md` on top of the map. The main case: `EVAL`/`EVALSHA` are in `@scripting` per the upstream-derived map (Redis 7+), but were in `@write` on Redis 6.x.
 
@@ -181,10 +186,12 @@ Apply cross-version category re-classifications from `version-deltas.md` on top 
 Apply the user's granularity preference (from Q4):
 
 - **Strict:** always emit individual command grants (`+CMD1 +CMD2 ...`). Never collapse to category, even if >50% of a category is used.
-- **Balanced:** if `used / total > 50%` for a category, the rule has a collapse opportunity — for v1, default to individual grants and note the opportunity in the output. (Future: prompt the user per-category via a follow-up `AskUserQuestion`; not implemented in v1.)
-- **Favor brevity:** if `used / total > 50%`, collapse to `+@category` automatically.
+- **Balanced:** for each category touched by the rule, compute `used / total` using the explicit count from `command-category-map.md` (its section header says `**N commands**`). **Only collapse if `used / total > 0.5`** for that specific category. If the ratio is `≤ 0.5`, emit individual command grants for the commands the service actually uses in that category — do NOT collapse. Note the ratios in the output's Detected Context block so the user can see why each category was or wasn't collapsed.
+- **Favor brevity:** if `used / total > 0.5`, collapse to `+@category` automatically.
 
-Use the `command-category-map.md` headers (`**N commands**`) as the denominator. Adjust for version: only count commands with `Since:` ≤ target version.
+**Why this is strict:** an earlier run over-collapsed despite no category crossing 50% (the service uses 1/13 `@pubsub`, 3/124 `@write`, 2/95 `@read` — all far below threshold) and silently emitted `+@write` instead of `+PUBLISH`, which then dropped `PUBLISH` from the rule entirely because `PUBLISH` isn't in `@write`. Don't collapse without computing the ratio. Don't assume a command is in a category without S1's explicit lookup.
+
+For the no-MCP path where the user supplied a minor version (e.g., "Redis 7.4"), filter the denominator: only count commands with `Since:` ≤ effective version.
 
 #### S3. Compose the rule body
 
