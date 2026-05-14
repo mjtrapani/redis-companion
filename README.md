@@ -104,7 +104,7 @@ The plugin works fully without an MCP connection. With one, you get one addition
 
 1. **Exact server version** via `INFO SERVER` — the agent reads the Redis version directly instead of asking you to specify it. Edition (OSS vs Enterprise / Redis Cloud) is still always asked; `INFO SERVER` doesn't reliably distinguish them.
 
-> **Note:** The `redis/mcp-redis` server exposes data-plane operations only — it does not expose ACL commands (`ACL CAT`, `ACL LIST`, `ACL GETUSER`, `ACL SETUSER`). Live category verification and safety-gated apply are on the roadmap pending a Redis MCP server with ACL support.
+> **Note:** The `redis/mcp-redis` server doesn't expose Redis's ACL admin surface — no `ACL CAT`, `ACL LIST`, `ACL GETUSER`, `ACL SETUSER`, `AUTH`, or `MONITOR`. It covers data-plane operations and `INFO SERVER`, which is why version detection works but live category verification and safety-gated apply don't. Both are on the roadmap pending a Redis MCP server with ACL support.
 
 ### Setup
 
@@ -256,7 +256,7 @@ This removed two on-camera-explainable decisions for v1 and produced a cleaner r
 
 ## Limitations
 
-**The Redis MCP today doesn't expose ACL commands — this is the single biggest gap in v1.** `redis/mcp-redis` is data-plane-only: `INFO SERVER` works, but `ACL SETUSER`, `ACL GETUSER`, `ACL CAT`, and `AUTH` don't. Net effect:
+**The Redis MCP today doesn't expose ACL commands — this is the single biggest gap in v1.** `redis/mcp-redis` covers data-plane operations and `INFO SERVER`, but the ACL admin surface (`ACL SETUSER`, `ACL GETUSER`, `ACL CAT`, `AUTH`) and `MONITOR` aren't exposed. Net effect:
 
 - **Apply is manual** via `redis-cli`
 - The agent reads category contents from the upstream-derived offline map rather than the live server — blind to deployment-specific customization (custom categories, loaded modules, non-core versions)
