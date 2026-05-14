@@ -245,26 +245,6 @@ A few non-obvious decisions, both because they matter for understanding the plug
 - Regenerating from upstream is a one-liner
 - The agent uses the `Since:` annotations to filter for older targets — `HEXPIRE` (Since 7.4.0) is eligible for a Redis 7.4 target but excluded for a Redis 7.2 target
 
-**Three-phase orchestration (skill → sub-agent → user → sub-agent).** Claude Code sub-agents are single-shot — they can't pause mid-execution to ask the user a question. So the user-interactive step lives in the *skill* (the orchestrator running inline in the main conversation), via `AskUserQuestion`, between two stateless sub-agent dispatches:
-
-1. **DISCOVERY** sub-agent → returns structured summary
-2. **`AskUserQuestion`** → batched user input
-3. **SYNTHESIS** sub-agent → composes rule from summary + answers
-
-Keeps the sub-agent context-bounded and lets the user steer with structured choices instead of free-text.
-
-**Dual output (condensed prompt + comprehensive `.md` + grep-extracted apply).** Long ACL rule lines get mangled by terminal copy-paste — word-wrap inserts hard breaks, shell-special chars (`~`, `*`, `&`, `>`) require careful quoting. So the rule is never copy-pasted from the prompt:
-
-- The skill writes a full markdown artifact to your cwd
-- The apply path is `grep -m1 '^ACL SETUSER' ./acl-rule-<user>.md | redis-cli`
-- The user copies a short, paste-safe one-liner; the rule itself is extracted by `grep`
-
-Generalizes to any domain where the artifact is more than ~120 chars.
-
-**Prompt tightening, not model selection, fixed the most interesting bug.** An earlier version of the agent reasoned creatively: *"`PUBLISH` writes to a channel, channels are write-like, so `PUBLISH` belongs in `@write`"* — and silently dropped pub/sub from the rule.
-
-The fix was a stricter synthesis instruction: *"use the upstream-derived map verbatim, do not infer from semantic similarity."* Switching the sub-agent to Sonnet was a separate decision (cost and latency on procedural work) — useful, but not the correctness fix.
-
 **`${CLAUDE_SKILL_DIR}` for plugin-bundle-relative reads.** Sub-agents inherit cwd from the user's invocation, not the plugin cache. So when the agent reads its reference docs, the skill prompts use `${CLAUDE_SKILL_DIR}/references/<file>.md` — an absolute path that Claude Code resolves to the plugin's actual install location. Relative paths silently read whatever happens to be in the user's project directory.
 
 **Strict-only granularity, no redundant denies.** Earlier versions of the plugin asked two more questions: *"permission granularity (strict / balanced / favor brevity)?"* and *"include defense-in-depth denies (`-@admin -@dangerous`)?"*. v1 hardcodes both:
@@ -317,6 +297,7 @@ The biggest future-work items:
 - **Module client-library detection** — even with category coverage above, the agent has no client-method mappings for module APIs (`r.json().set(...)`, `client.ft().search(...)`). Adding those mappings closes the gap for Enterprise deployments that load Redis Stack modules.
 - **Database-scoped ACLs** for multi-tenant Enterprise — Enterprise lets ACLs be scoped per-database; v1 treats the target as a single ACL surface.
 - **`ACL LOG`-driven denial diagnosis** — inverse of the v1 workflow: read the audit trail of recent ACL denials, group them, and suggest minimal additions to unblock the application.
+- **Multi-version `commands.json` diffing to programmatically derive version deltas** — today, the cross-version category shifts in `version-deltas.md` (e.g., `EVAL` moving from `@write` to `@scripting` in Redis 7) are hand-curated from training-data knowledge. Extending `scripts/build-category-map.py` to pull `commands.json` from multiple tagged Redis releases and diff them would derive the category reclassifications programmatically. The major-version shifts are well-known and almost certainly correct; specific minor-version cutoffs are vulnerable to small errors.
 - **Auto-fix mode** — rewrite detected anti-patterns in place (`r.keys("user:*")` → `r.scan_iter(match="user:*")`), with a dry-run default.
 
 ## Contact

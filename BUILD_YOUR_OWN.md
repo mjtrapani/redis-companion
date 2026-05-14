@@ -30,7 +30,7 @@ Four cooperating components, each doing one job:
 | **Hook** (guardrail) | Project-level invariant enforced from outside the agent. Scans every `Write`/`Edit` Claude makes for a domain-specific failure shape (here: literal credentials) and blocks the call if it matches. | The agent's output contract is "never embed a real credential in the file." The hook is what keeps that contract enforced if the agent ever stops honoring it — model drift, prompt injection, or the user asking Claude to "just save my password somewhere." Defense-in-depth, and the most portable piece across forks. |
 | **MCP** (live state) | External tool integration — talk to the target system itself (Redis, Postgres, K8s, AWS, etc.) for live validation, current-state queries, or (with explicit confirmation) actual application of the generated artifact. | Plugs you into the ecosystem without rebuilding it. When connected, the agent can sanity-check its output against reality and (carefully) close the loop. |
 
-**Why this separation matters**: it lets the *agent* stay focused on its workflow, the *skill* stay focused on knowledge, the *hook* stay focused on safety, and the *MCP* stay focused on external integration. Each can be updated independently. A customer forking your plugin replaces the skill's reference docs and the agent's domain instructions — without rewriting anything else.
+Each piece is independently editable. Forking the plugin means replacing the skill's reference docs and the agent's domain instructions — without rewriting anything else.
 
 ## Two patterns inside the shape worth borrowing
 
@@ -142,10 +142,4 @@ Once your forked plugin works locally, publishing it for other users is straight
 
 ## The principle
 
-What makes this shape work is that **the agent reads your code and explains its output**. Any "translate intent to syntax" workflow fits — wherever a developer has to manually translate "what my service does" into a configuration artifact written in someone else's grammar, this pattern saves real time and reduces real mistakes.
-
-The skill is *what the agent needs to know to be correct*. The agent is *the workflow*. The hook is *the safety net for the moments the agent isn't there*. The MCP is *the connection to reality* — what's actually deployed, what currently works, and (carefully) how to apply the generated artifact.
-
-Each piece is independently editable. Each piece has one job. Together they let a domain expert ship a plugin that captures their org's specific judgment in a tool any backend engineer can run from their editor.
-
-That's the shape. Make it yours.
+The agent reads your code and explains its output back in your terms. Any "translate intent to syntax" workflow fits — wherever a developer would manually translate "what my service does" into a configuration written in someone else's grammar, this pattern saves real time and reduces real mistakes. The hardest part isn't the plumbing; it's the domain expertise to steer Claude as a peer while building it.
