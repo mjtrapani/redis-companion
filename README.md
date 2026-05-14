@@ -185,17 +185,44 @@ In `skills/acl-reference/`. **Hidden from the user's `/` menu** via `user-invoca
 
 ### Agent: `acl-generator`
 
-Task executor, in `agents/acl-generator.md`. **Runs on `claude-sonnet-4-6`** (set explicitly in the agent's frontmatter, not inherited from the user's session). Two-mode contract — `DISCOVERY` (scan codebase, return structured findings, no questions, no synthesis) and `SYNTHESIS` (take findings + user answers, look up commands in the upstream-derived category map, produce annotated rule). Read-only filesystem access — `disallowedTools: Write, Edit, NotebookEdit, Bash` is set in the frontmatter. The agent's working tools are `Read`/`Grep`/`Glob` for code discovery, `Skill` to load the `acl-reference` knowledge base on demand, the Redis MCP `info` tool for server-version detection when connected, and a one-shot `WebFetch` for ambiguous client-library mappings.
+Task executor in `agents/acl-generator.md`. Runs on `claude-sonnet-4-6` (set explicitly in the agent's frontmatter, not inherited from the user's session).
 
-**Why Sonnet, not Opus:** the agent's work is procedural lookup + composition (read files, look up commands in a static map, compose output following a fixed template). Sonnet is cheaper and faster, and well-suited to this kind of deterministic work — specifying `model:` in the frontmatter is optional but useful when the sub-agent doesn't benefit from Opus's open-ended reasoning. (Worth flagging honestly: an earlier bug where the agent reasoned *"PUBLISH writes to a channel → @write"* and silently dropped pub/sub from the rule was fixed by *tightening the synthesis prompt* — *"use the upstream-derived map verbatim, do not infer from semantic similarity"* — not by switching models. Prompt clarity does more for correctness here than model choice does.)
+**Two-mode contract:**
 
-When a client library method isn't in the skill's reference, the agent makes one targeted `WebFetch` to the library's official API docs before flagging it as uncertain. Hard fallback on ambiguity or fetch failure — no link-following, no retries.
+- **DISCOVERY** — scan codebase, return structured findings. No questions, no synthesis.
+- **SYNTHESIS** — take findings + user answers, look up commands in the upstream-derived category map, produce annotated rule.
+
+**Tools:**
+
+- Read-only filesystem (`disallowedTools: Write, Edit, NotebookEdit, Bash` in frontmatter)
+- `Read` / `Grep` / `Glob` for code discovery
+- `Skill` to load the `acl-reference` knowledge base on demand
+- Redis MCP `info` tool for server-version detection (when MCP connected)
+- One-shot `WebFetch` for ambiguous client-library mappings — if the docs don't resolve the ambiguity, the call is flagged for review rather than baked into the rule. No link-following, no retries.
+
+**Why Sonnet, not Opus.** The agent's work is procedural lookup + composition — read files, look up commands in a static map, compose output following a fixed template. Sonnet is cheaper and faster and well-suited to this deterministic work; specifying `model:` in the frontmatter is optional but useful when the sub-agent doesn't benefit from Opus's open-ended reasoning.
+
+Worth flagging honestly: an earlier bug where the agent reasoned *"`PUBLISH` writes to a channel → `@write`"* and silently dropped pub/sub from the rule was fixed by **tightening the synthesis prompt** (*"use the upstream-derived map verbatim, do not infer from semantic similarity"*) — not by switching models. Prompt clarity does more for correctness here than model choice does.
 
 ### Hook: `credential-guard`
 
-PreToolUse hook on `Write` / `Edit` / `MultiEdit`, in `hooks/`. Scans every file write Claude makes in this repo for literal Redis credentials — passwords embedded in URLs, `REDIS_PASS=` set to a real value, `redis-cli -a <password>` invocations. Blocks the write if a match is found. Recognized placeholders (`><changeme>`, `${REDIS_PASS}`, `$REDIS_PASS`, etc.) pass through.
+PreToolUse hook on `Write` / `Edit` / `MultiEdit`, in `hooks/`. Scans every file write Claude makes in this repo for literal Redis credentials and blocks the write if a match is found:
 
-**Why it matters.** The agent's output contract is *"always use `<changeme>` as the password placeholder, never embed a real password in the file the plugin writes."* The hook is what makes that contract enforced *from outside the agent*. The agent honors the contract today; the hook is what keeps it enforced if anything ever breaks the agent's adherence — model drift, prompt injection from an untrusted file the agent reads, or a user asking Claude in this repo to "just save my redis URL with the password into a config." For a plugin whose entire job is generating credentials-adjacent artifacts, the hook is the project-level invariant that real secrets don't end up on disk via Claude — regardless of who or what is driving the session. It's also the most directly portable piece of the plugin: forks for Postgres, AWS IAM, or Kubernetes RBAC keep the hook and just swap the regex set.
+- Passwords embedded in connection URLs
+- `REDIS_PASS=` set to a real value
+- `redis-cli -a <password>` invocations
+
+Recognized placeholders pass through: `><changeme>`, `${REDIS_PASS}`, `$REDIS_PASS`, ALL_CAPS env-var-style names.
+
+**Why it matters.** The agent's output contract is *"always use `<changeme>` as the password placeholder, never embed a real password in the file the plugin writes."* The hook is what makes that contract enforced *from outside the agent*.
+
+The agent honors the contract today. The hook keeps it enforced if anything ever breaks the agent's adherence:
+
+- Model drift in a future Claude version
+- Prompt injection from an untrusted file the agent reads
+- A user asking Claude in this repo to "just save my redis URL with the password into a config"
+
+For a plugin whose entire job is generating credentials-adjacent artifacts, the hook is the project-level invariant that real secrets don't end up on disk via Claude — regardless of who or what is driving the session. It's also the **most directly portable piece** of the plugin: forks for Postgres, AWS IAM, or Kubernetes RBAC keep the hook structure and just swap the regex set.
 
 **What the hook doesn't cover** (worth being honest about):
 
@@ -212,25 +239,56 @@ Declared in `plugin.json`, wires the Redis MCP server (`redis/mcp-redis`) using 
 
 A few non-obvious decisions, both because they matter for understanding the plugin and because they're portable to any "translate code intent into a configuration artifact" plugin you might build.
 
-**Upstream-derived command-category map.** The `command-category-map.md` reference is not hand-curated. `scripts/build-category-map.py` pulls 422 commands directly from `redis/redis@8.6.3/src/commands/*.json` and emits one Markdown table per ACL category, with each command annotated by its `Since:` version. The map is verifiable against the official Redis source, regenerating from upstream is a one-liner, and the agent uses the `Since:` annotations to filter for older targets — `HEXPIRE` (Since 7.4.0) is eligible for a Redis 7.4 target but excluded for a Redis 7.2 target.
+**Upstream-derived command-category map.** The `command-category-map.md` reference is not hand-curated. `scripts/build-category-map.py` pulls 422 commands directly from `redis/redis@8.6.3/src/commands/*.json` and emits one Markdown table per ACL category, with each command annotated by its `Since:` version.
 
-**Three-phase orchestration (skill → sub-agent → user → sub-agent).** Claude Code sub-agents are single-shot — they can't pause mid-execution to ask the user a question. So the user-interactive step lives in the *skill* (the orchestrator running inline in the main conversation), via `AskUserQuestion`, between two stateless sub-agent dispatches: DISCOVERY → batched ask → SYNTHESIS. This keeps the sub-agent context-bounded and lets the user steer with structured choices instead of free-text.
+- The map is verifiable against the official Redis source
+- Regenerating from upstream is a one-liner
+- The agent uses the `Since:` annotations to filter for older targets — `HEXPIRE` (Since 7.4.0) is eligible for a Redis 7.4 target but excluded for a Redis 7.2 target
 
-**Dual output (condensed prompt + comprehensive `.md` + grep-extracted apply).** Long ACL rule lines get mangled by terminal copy-paste — word-wrap inserts hard breaks, shell-special chars (`~`, `*`, `&`, `>`) require careful quoting. So the rule is never copy-pasted from the prompt: the skill writes a full markdown artifact to your cwd, and the apply path is `grep -m1 '^ACL SETUSER' ./acl-rule-<user>.md | redis-cli` — the user copies a short, paste-safe one-liner; the rule itself is extracted by `grep`. Generalizes to any domain where the artifact is more than ~120 chars.
+**Three-phase orchestration (skill → sub-agent → user → sub-agent).** Claude Code sub-agents are single-shot — they can't pause mid-execution to ask the user a question. So the user-interactive step lives in the *skill* (the orchestrator running inline in the main conversation), via `AskUserQuestion`, between two stateless sub-agent dispatches:
 
-**Prompt tightening, not model selection, fixed the most interesting bug.** An earlier version of the agent reasoned creatively: *"`PUBLISH` writes to a channel, channels are write-like, so `PUBLISH` belongs in `@write`"* — and silently dropped pub/sub from the rule. The fix was a stricter synthesis instruction: *"use the upstream-derived map verbatim, do not infer from semantic similarity."* Switching the sub-agent to Sonnet was a separate decision (cost and latency on procedural work) — useful, but not the correctness fix.
+1. **DISCOVERY** sub-agent → returns structured summary
+2. **`AskUserQuestion`** → batched user input
+3. **SYNTHESIS** sub-agent → composes rule from summary + answers
+
+Keeps the sub-agent context-bounded and lets the user steer with structured choices instead of free-text.
+
+**Dual output (condensed prompt + comprehensive `.md` + grep-extracted apply).** Long ACL rule lines get mangled by terminal copy-paste — word-wrap inserts hard breaks, shell-special chars (`~`, `*`, `&`, `>`) require careful quoting. So the rule is never copy-pasted from the prompt:
+
+- The skill writes a full markdown artifact to your cwd
+- The apply path is `grep -m1 '^ACL SETUSER' ./acl-rule-<user>.md | redis-cli`
+- The user copies a short, paste-safe one-liner; the rule itself is extracted by `grep`
+
+Generalizes to any domain where the artifact is more than ~120 chars.
+
+**Prompt tightening, not model selection, fixed the most interesting bug.** An earlier version of the agent reasoned creatively: *"`PUBLISH` writes to a channel, channels are write-like, so `PUBLISH` belongs in `@write`"* — and silently dropped pub/sub from the rule.
+
+The fix was a stricter synthesis instruction: *"use the upstream-derived map verbatim, do not infer from semantic similarity."* Switching the sub-agent to Sonnet was a separate decision (cost and latency on procedural work) — useful, but not the correctness fix.
 
 **`${CLAUDE_SKILL_DIR}` for plugin-bundle-relative reads.** Sub-agents inherit cwd from the user's invocation, not the plugin cache. So when the agent reads its reference docs, the skill prompts use `${CLAUDE_SKILL_DIR}/references/<file>.md` — an absolute path that Claude Code resolves to the plugin's actual install location. Relative paths silently read whatever happens to be in the user's project directory.
 
 ## Limitations
 
-**The Redis MCP today doesn't expose ACL commands — this is the single biggest gap in v1.** `redis/mcp-redis` is data-plane-only: `INFO SERVER` works, but `ACL SETUSER`, `ACL GETUSER`, `ACL CAT`, and `AUTH` don't. Net effect: apply is manual via `redis-cli`, the agent reads category contents from the upstream-derived offline map rather than the live server (blind to deployment-specific customization — custom categories, loaded modules, non-core versions), and verification + impersonation tests are user-driven. *Gap-closing options in [What's next](#whats-next).*
+**The Redis MCP today doesn't expose ACL commands — this is the single biggest gap in v1.** `redis/mcp-redis` is data-plane-only: `INFO SERVER` works, but `ACL SETUSER`, `ACL GETUSER`, `ACL CAT`, and `AUTH` don't. Net effect:
 
-**Client-library coverage in v1.** The plugin documents detection patterns and method-to-command mappings for **`redis-py` (Python), `ioredis` (Node.js), and `go-redis` (Go)** — see `skills/acl-reference/references/client-library-patterns.md`. However, only `redis-py` has been **end-to-end tested** via the included `examples/sample-service/` fixture. The `ioredis` and `go-redis` patterns are derived from each library's published API but have not been exercised against a real codebase. If you run the plugin against a Node.js or Go service and the discovery output looks off, file an issue with a representative call site — the patterns are easy to refine once we see real usage.
+- **Apply is manual** via `redis-cli`
+- The agent reads category contents from the upstream-derived offline map rather than the live server — blind to deployment-specific customization (custom categories, loaded modules, non-core versions)
+- Verification + impersonation tests are user-driven
 
-Without MCP, the skill asks for the target Redis **major version** (6 / 7 / 8) and then for the **minor version** (e.g., 8.0 / 8.2 / 8.4 / 8.6) in a follow-up question — the category-map filter is keyed on `Since: <= <effective_version>` to-the-minor, and package files reveal client library version, not server version. With MCP, `INFO SERVER` provides the exact version, which the skill surfaces for confirm-or-override rather than asking blindly.
+*Gap-closing options in [What's next](#whats-next).*
 
-For the target **edition** (OSS vs Enterprise / Redis Cloud): the skill always asks. `INFO SERVER` is not a reliable edition discriminator — Redis Cloud and self-managed Redis Enterprise deployments don't consistently expose a field that says "I am Enterprise", and the closest fields can match an OSS deployment. With MCP connected, `INFO SERVER` is used to surface the server **version** (which the user may not know off-hand), but never to infer edition.
+**Client-library coverage in v1.** The plugin documents detection patterns and method-to-command mappings for `redis-py` (Python), `ioredis` (Node.js), and `go-redis` (Go) — see `skills/acl-reference/references/client-library-patterns.md`.
+
+Only `redis-py` has been **end-to-end tested** via the included `examples/sample-service/` fixture. The `ioredis` and `go-redis` patterns are derived from each library's published API but have not been exercised against a real codebase. If you run the plugin against a Node.js or Go service and the discovery output looks off, file an issue with a representative call site — the patterns are easy to refine once we see real usage.
+
+**Version detection.**
+
+- **Without MCP:** the skill asks for the target Redis major version (6 / 7 / 8), then asks for the minor version (e.g., 8.0 / 8.2 / 8.4 / 8.6) in a follow-up. The category-map filter is keyed on `Since: <= <effective_version>` to-the-minor.
+- **With MCP:** `INFO SERVER` provides the exact version; the skill surfaces it for confirm-or-override rather than asking blindly.
+
+Package files reveal client-library version, not server version — so without MCP, asking is the only reliable path.
+
+**Edition detection: the skill always asks.** `INFO SERVER` is not a reliable edition discriminator — Redis Cloud and self-managed Redis Enterprise deployments don't consistently expose a field that says "I am Enterprise," and the closest fields can match an OSS deployment. With MCP connected, `INFO SERVER` is used to surface the server **version**, but never to infer edition.
 
 The agent **flags but doesn't silently bake** these:
 
