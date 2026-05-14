@@ -215,7 +215,7 @@ ACL SETUSER <username> on ><changeme> <rest of rule>
 
 **Full details:** `./acl-rule-<username>.md` — open this file for per-term annotations, detected context, and apply patterns.
 
-**To apply** (no copy-paste of the rule from this prompt):
+**To apply** (the long rule line stays in the `.md` — you only copy a short command from this message):
 
 **One-liner** (substitute password inline, then apply):
 
