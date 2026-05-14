@@ -197,6 +197,13 @@ PreToolUse hook on `Write` / `Edit` / `MultiEdit`, in `hooks/`. Scans every file
 
 **Why it matters.** The agent's output contract is *"always use `<changeme>` as the password placeholder, never embed a real password in the file the plugin writes."* The hook is what makes that contract enforced *from outside the agent*. The agent honors the contract today; the hook is what keeps it enforced if anything ever breaks the agent's adherence — model drift, prompt injection from an untrusted file the agent reads, or a user asking Claude in this repo to "just save my redis URL with the password into a config." For a plugin whose entire job is generating credentials-adjacent artifacts, the hook is the project-level invariant that real secrets don't end up on disk via Claude — regardless of who or what is driving the session. It's also the most directly portable piece of the plugin: forks for Postgres, AWS IAM, or Kubernetes RBAC keep the hook and just swap the regex set.
 
+**What the hook doesn't cover** (worth being honest about):
+
+- **Prompt output, not just disk writes.** The hook is `PreToolUse` on `Write` / `Edit` / `MultiEdit` — it intercepts file writes only. The text Claude streams back into the conversation isn't a tool call and isn't scanned. Prompt-output safety relies on the agent's contract (use `<changeme>`, substitute real passwords only at apply-time via `sed`), not on the hook.
+- **Low-entropy real credentials.** Common placeholder words like `password`, `secret`, `xxx`, `redacted` are in the allow-list. If someone's actual Redis password is the literal string `secret`, the hook will let it through. This is a deliberate false-negative-vs-false-positive trade-off — entropy-scoring the suspected value is on the [What's next](#whats-next) refinement list.
+- **Redis-specific patterns only.** AWS access keys, GitHub tokens, generic database connection strings don't trigger this hook. Forks for other domains replace the regex set entirely (see [BUILD_YOUR_OWN.md](./BUILD_YOUR_OWN.md), step 4).
+- **Already-on-disk credentials.** The hook scans only the *new* content being written. If a real credential is already in a file that Claude is editing, that's a separate problem class.
+
 ### MCP config
 
 Declared in `plugin.json`, wires the Redis MCP server (`redis/mcp-redis`) using `${REDIS_URL}`. Auto-starts when the env var is set, stays out of the way otherwise. The agent uses one MCP tool today — `INFO SERVER` for server-version detection. See *Optional MCP* above for scope, and *What's next* for the ACL-command-plane gap.

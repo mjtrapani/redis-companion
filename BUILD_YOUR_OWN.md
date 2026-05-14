@@ -91,6 +91,11 @@ Same shape, different domain. Each one is a real plugin idea you could ship in a
 
    `hooks/credential-guard.py` has a `PATTERNS` list of regexes for Redis credentials. Replace them with your domain's credential shapes (Postgres connection strings, kubeconfig tokens, AWS access keys, etc.). Keep the placeholder allow-list — it's how the agent's own output (which uses `<changeme>` and friends) passes through. The hook's value is in being the *outside-the-agent* enforcement of "no real credentials touch disk via Claude in this repo" — your domain's customer gets the same guarantee for free as long as your regex set is reasonably complete.
 
+   **Scope to be aware of** before you advertise the hook as a guarantee:
+   - **Disk only, not prompt output.** `PreToolUse` on `Write` / `Edit` / `MultiEdit` means the hook sees file writes. It doesn't scan text the agent emits to the conversation — that safety lives in the agent's prompt design.
+   - **Low-entropy values pass through.** The allow-list contains `password`, `secret`, `xxx`, `redacted`, etc. — necessary to avoid blocking docstring examples, but it means a real credential that happens to be the string `secret` won't be caught. Entropy-scoring is a meaningful refinement if your domain has stricter compliance requirements.
+   - **Only the new content of the write.** The hook scans `tool_input.content` for Write, `new_string` for Edit / MultiEdit. It doesn't read the file's existing on-disk contents — an already-present credential won't be discovered.
+
 5. **Swap the MCP**
 
    The `mcpServers` block in `.claude-plugin/plugin.json` declares the Redis MCP server. Replace with the MCP server for your domain. Many domains have one already published (Postgres, Kubernetes, AWS, GitHub, Stripe, etc.). If your domain doesn't yet, the plugin still works without MCP — the agent just operates in degraded mode (no live validation, no apply).
