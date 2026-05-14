@@ -319,6 +319,10 @@ The biggest future-work items:
 - **`ACL LOG`-driven denial diagnosis** — inverse of the v1 workflow: read the audit trail of recent ACL denials, group them, and suggest minimal additions to unblock the application.
 - **Auto-fix mode** — rewrite detected anti-patterns in place (`r.keys("user:*")` → `r.scan_iter(match="user:*")`), with a dry-run default.
 
+## Contact
+
+Marko Trapani — [mjtrapani@gmail.com](mailto:mjtrapani@gmail.com). Questions, contributions, or reports of edge cases the discovery patterns don't handle are all welcome.
+
 ## Credits
 
 MCP integration uses [`redis/mcp-redis`](https://github.com/redis/mcp-redis), the official general-purpose Redis MCP server.
