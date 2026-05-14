@@ -209,7 +209,7 @@ Order:
 1. **Authentication:** `on` (OSS only; Enterprise rules have no auth term)
 2. **Password placeholder:** `><changeme>` (OSS only; **exact token, never vary**)
 3. **Keyspace reset:** `resetkeys`
-4. **Key patterns:** `~pattern1 ~pattern2 ...` (alphabetical)
+4. **Key patterns:** `~pattern1 ~pattern2 ...` (alphabetical). **MUST include every key the service touches — both the prefix-family patterns from discovery's "Key patterns" section AND the exact-name keys from discovery's "Stream keys" section.** A common bug is to put stream commands like `+XADD` in the command grants but forget to add the stream's key pattern (e.g., `~activity:events`) to the `~` clauses — the rule would then deny the XADD at the keyspace level. Always merge stream keys into the `~` list. Verify: every entry in discovery's "Commands used" table whose key column has a value must have a matching `~pattern` here.
 5. **Channel reset:** `resetchannels`
 6. **Channel patterns:** `&pattern1 &pattern2 ...` (alphabetical)
 7. **Command baseline deny:** `nocommands` (alias for `-@all`) — **required for true least-privilege**
@@ -314,14 +314,37 @@ Append the rule (without the `ACL SETUSER` prefix; use the `user <username> ...`
 redis-cli ACL GETUSER <username>
 ```
 
-### Sanity-check
+### Sanity-check with the service
+
+If the service has a runnable entry point (e.g., `python3 <path-to-service>/service.py` for the bundled example), exercise it under the locked-down user:
 
 ```bash
-# Should succeed (in-scope SET):
-redis-cli --user <username> --pass '<password>' SET '<one-of-your-key-patterns>:test' '{"test":1}'
+# Local-dev nopass user:
+REDIS_URL='redis://<username>@<host>:<port>' python3 <path-to-service>/service.py
 
-# Should fail with NOPERM (out-of-scope):
-redis-cli --user <username> --pass '<password>' FLUSHDB
+# With a password:
+REDIS_URL='redis://<username>:<password>@<host>:<port>' python3 <path-to-service>/service.py
+```
+
+Exit code 0 ⇒ every Redis call the service makes is granted by the rule. Exit code 1 ⇒ at least one call hit `NOPERM` — the rule is missing a grant; the failing line will be in stderr.
+
+### Negative-test via redis-cli
+
+Verify the rule actually denies things it should:
+
+```bash
+# Local-dev nopass — IMPORTANT: use 'redis://<user>:@host' (colon with nothing after the user).
+# Plain 'redis://<user>@host' (no colon) makes redis-cli interpret <user> as a PASSWORD for the
+# 'default' user and silently fall back, so denies look like they pass. The trailing colon makes
+# the username-vs-password boundary explicit; an empty password is accepted by nopass users.
+redis-cli -u 'redis://<username>:@<host>:<port>' FLUSHDB
+# Expect: (error) NOPERM User <username> has no permissions to run the 'flushdb' command
+
+redis-cli -u 'redis://<username>:@<host>:<port>' GET out-of-scope:key
+# Expect: (error) NOPERM No permissions to access a key
+
+# With a password:
+redis-cli -u 'redis://<username>:<password>@<host>:<port>' FLUSHDB
 ```
 
 ## Detected context

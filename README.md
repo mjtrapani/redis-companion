@@ -49,27 +49,24 @@ You can also confirm the knowledge-base skill is active by asking something Redi
 
 ## Try the demo
 
-A ~40-line sample service is included at `examples/sample-service/`. It uses `redis-py` and exercises strings (SET/GET/MGET/SETEX), pub/sub (PUBLISH), and streams (XADD).
+A ~40-line sample service is included at `examples/sample-service/`. It uses `redis-py` and exercises strings (`SET`/`GET`/`MGET`/`SETEX`), pub/sub (`PUBLISH`), and streams (`XADD`). Run `python3 examples/sample-service/service.py` directly to exercise every function once with sample data — the file is both the library AND its own smoke test (see the `if __name__ == "__main__":` block).
 
-In Claude Code:
+### Generate the rule
 
-```code
+In Claude Code, in the project root:
+
+```text
 /redis-companion:rule examples/sample-service
 ```
 
-The agent will:
+The plugin will:
 
 1. Detect `redis-py` from the imports + `requirements.txt`
 2. Find the key patterns (`cache:user:*`, `session:*`), the stream key (`activity:events`), and the pub/sub channel (`notifications`)
 3. Inventory the commands: `SET`, `GET`, `MGET`, `SETEX`, `PUBLISH`, `XADD`
-4. Ask you for: target Redis **edition** (OSS / Enterprise), target Redis **major version** (6 / 7 / 8), **defense-in-depth deny** preference, and **permission granularity** (strict / balanced / brevity)
-5. Emit something like:
-
-```code
-ACL SETUSER my-service-user on ><changeme> ~cache:user:* ~session:* ~activity:events &notifications +GET +MGET +SET +SETEX +PUBLISH +XADD
-```
-
-…with a per-term annotation table citing the source lines that justified each grant, plus instructions on how to apply (`ACL SETUSER` for OSS, "paste into an ACL Rule body" for Enterprise).
+4. Ask you 4–5 questions: target Redis **edition**, **version** (confirms from `INFO SERVER` when MCP is connected), **defense-in-depth deny** preference, **permission granularity**, and a 5th question for any speculation candidates surfaced from `TODO` comments
+5. Write `./acl-rule-sample-service.md` to your cwd — comprehensive output with annotations, detected context, and four apply patterns
+6. Emit a short summary in Claude Code with the rule, the file path, and the apply commands
 
 You can also invoke conversationally:
 
@@ -77,7 +74,29 @@ You can also invoke conversationally:
 scope a Redis ACL for examples/sample-service
 ```
 
-…and Claude will route to the agent via its description.
+### Apply and validate end-to-end
+
+The demo's strongest beat: *apply* the rule and watch the service still work under it.
+
+```bash
+# 1. Apply the rule (inline-sed swaps the placeholder for nopass for local-dev)
+sed 's/><changeme>/nopass/' ./acl-rule-sample-service.md | grep -m1 '^ACL SETUSER' | redis-cli
+
+# 2. Verify the rule landed
+redis-cli ACL GETUSER sample-service
+
+# 3. Run the service under the locked-down user — should print 6/6 OK
+REDIS_URL='redis://sample-service@localhost:6379' python3 examples/sample-service/service.py
+
+# 4. Confirm out-of-scope commands are denied — note the colon-no-password URL form
+#    (redis-cli with 'redis://user@host' falls back to the default user — use 'redis://user:@host')
+redis-cli -u 'redis://sample-service:@localhost:6379' FLUSHDB
+# → (error) NOPERM User sample-service has no permissions to run the 'flushdb' command
+redis-cli -u 'redis://sample-service:@localhost:6379' GET other:key
+# → (error) NOPERM No permissions to access a key
+```
+
+Six `OK`s on step 3 and a clean `NOPERM` on step 4 = the generated rule grants exactly what the service uses, and denies everything else.
 
 ## Optional: connect a Redis MCP for live version detection
 
