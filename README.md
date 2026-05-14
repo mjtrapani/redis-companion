@@ -164,7 +164,7 @@ flowchart TD
     W -->|"./acl-rule-username.md (audit artifact)"| U
 ```
 
-The plugin is five cooperating components, each doing one job. The `rule` skill orchestrates a three-phase flow: it dispatches the agent for **discovery**, pauses for **user input** via `AskUserQuestion`, then dispatches the agent again for **synthesis**. This pattern exists because Claude Code sub-agents run single-shot — they can't pause mid-execution to ask the user a question. So the interactive step lives in the inline skill, between two stateless sub-agent dispatches.
+The plugin uses four Claude Code primitives — **two skills** (one orchestrator, one knowledge base), **one agent**, **one hook**, **one MCP**. The `rule` skill orchestrates a three-phase flow: it dispatches the agent for **discovery**, pauses for **user input** via `AskUserQuestion`, then dispatches the agent again for **synthesis**. This pattern exists because Claude Code sub-agents run single-shot — they can't pause mid-execution to ask the user a question. So the interactive step lives in the inline skill, between two stateless sub-agent dispatches.
 
 ### Skill: `rule` (orchestrator)
 
