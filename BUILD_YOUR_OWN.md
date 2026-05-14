@@ -115,6 +115,22 @@ Same shape, different domain. Each one is a real plugin idea you could ship in a
 
    Replace the persona description, install instructions are mostly the same. Adapt the demo to your sample target. Be honest about limitations — what your agent can and can't infer reliably.
 
+## Distribute via the Claude Code marketplace
+
+Once your forked plugin works locally, publishing it for other users is straightforward — no central registry submission required. The "marketplace identifier" is just your public GitHub repo path.
+
+1. **Push the repo to a public GitHub URL.** `<github-username>/<repo-name>` becomes the marketplace identifier.
+
+2. **Confirm both manifests are committed at `.claude-plugin/`:**
+   - `marketplace.json` — declares the marketplace + lists the plugins it contains (you can have multiple plugins in one marketplace if you want)
+   - `plugin.json` — declares the plugin itself (`name`, `version`, `mcpServers`, etc.)
+
+3. **Document the install path in your README.** Users install by running `/plugins` in any Claude Code session, picking *Browse marketplaces → Add marketplace*, and pasting `<github-username>/<repo-name>`. Then they pick the plugin from that marketplace and install. The plugin is then available in every session, no flags needed.
+
+4. **Version bumps:** when you ship a change, bump `version` in both `plugin.json` AND in the corresponding plugin entry inside `marketplace.json` (the two must match). Users get the update when they next sync the marketplace via `/plugins`.
+
+**Optional — also support local development.** For contributors or your own testing, `git clone <repo>` then `claude --plugin-dir .` from inside the repo runs the plugin from the local checkout for the current session only. Useful for iterating before pushing.
+
 ## The principle
 
 What makes this shape work is that **the agent reads your code and explains its output**. Any "translate intent to syntax" workflow fits — wherever a developer has to manually translate "what my service does" into a configuration artifact written in someone else's grammar, this pattern saves real time and reduces real mistakes.
