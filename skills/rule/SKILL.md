@@ -194,11 +194,19 @@ Long ACL rule lines get mangled by terminal copy-paste — word-wrap inserts har
 
 **Step 1 — Write `./acl-rule-<username>.md` to the current working directory.**
 
-Use the `Write` tool to save the agent's full synthesis output (verbatim) to `./acl-rule-<username>.md` in cwd. This file contains everything: rule, per-term annotations, detected context, apply instructions, verify steps. It's the comprehensive deliverable — designed for review, audit trail, version control, future reference.
+Save the agent's full synthesis output (verbatim) to `./acl-rule-<username>.md` in cwd. This file contains everything: rule, per-term annotations, detected context, apply instructions, verify steps. It's the comprehensive deliverable — designed for review, audit trail, version control, future reference.
+
+**Overwrite-safe procedure (mandatory order):**
+
+1. Use `Glob` (pattern: `acl-rule-<username>.md`) or `Read` directly on the path to check whether the file already exists from a prior run.
+2. **If it exists**, call `Read` on the file first (this satisfies the `Write` tool's same-session read-before-overwrite guard — without it, `Write` errors out with "Error writing file" and the user sees a noisy retry on screen).
+3. Call `Write` with the agent's verbatim synthesis output.
+
+Do not skip the existence check, even on a "first run" — the user may have prior rule files in cwd from earlier `/redis-companion:rule` invocations. The check is cheap and removes the only on-camera error visible during repeated demos.
 
 Critical formatting requirement for grep-extraction to work later: the rule must appear on its own line starting with `ACL SETUSER ` (or the rule body for Enterprise). The agent's standard output template already puts the rule inside a fenced code block on its own line — preserve that exactly when writing the file.
 
-If `Write` fails or the user denies the permission prompt, fall back: tell the user the file write didn't happen and surface the agent's full output inline as a fallback.
+If `Write` still fails or the user denies the permission prompt, fall back: tell the user the file write didn't happen and surface the agent's full output inline as a fallback.
 
 **Step 2 — Emit a CONDENSED user-facing message.**
 
