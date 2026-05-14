@@ -104,7 +104,7 @@ The plugin works fully without an MCP connection. With one, you get one addition
 
 1. **Exact server version** via `INFO SERVER` — the agent reads the Redis version directly instead of asking you to specify it. Edition (OSS vs Enterprise / Redis Cloud) is still always asked; `INFO SERVER` doesn't reliably distinguish them.
 
-> **Note:** The `redis/mcp-redis` server doesn't expose Redis's ACL admin surface — no `ACL CAT`, `ACL LIST`, `ACL GETUSER`, `ACL SETUSER`, `AUTH`, or `MONITOR`. It covers data-plane operations and `INFO SERVER`, which is why version detection works but live category verification and safety-gated apply don't. Both are on the roadmap pending a Redis MCP server with ACL support.
+> **Note:** The `redis/mcp-redis` server doesn't expose Redis's ACL admin surface (`ACL CAT`, `ACL LIST`, `ACL GETUSER`, `ACL SETUSER`, `AUTH`) or `MONITOR`. It covers data-plane operations and `INFO SERVER`, which is why version detection works but live category verification and safety-gated apply don't. Both are on the roadmap pending a Redis MCP server with ACL support.
 
 ### Setup
 
