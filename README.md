@@ -1,6 +1,6 @@
 # redis-companion
 
-A Claude Code plugin that reads your service's code and generates a least-privilege Redis ACL rule — version-aware, with per-term annotations, and (optionally) provisioned and validated against a live Redis.
+A Claude Code plugin that reads your service's code and generates a least-privilege Redis ACL rule — version-aware, with per-term annotations. Outputs both a concise prompt-ready summary and a full markdown artifact you can review, version-control, and apply with one shell command.
 
 ---
 
@@ -135,33 +135,44 @@ flowchart TD
     classDef entry  fill:#1c2b3a,stroke:#DC382D,stroke-width:2px,color:#fff
     classDef red    fill:#1c2b3a,stroke:#DC382D,stroke-width:1px,color:#e2e8f0
     classDef node   fill:#1c2b3a,stroke:#334155,color:#e2e8f0
-    classDef gate   fill:#0d1520,stroke:#334155,color:#cbd5e1
+    classDef hook   fill:#0d1520,stroke:#DC382D,stroke-dasharray: 5 5,color:#e2e8f0
 
     U([User]):::entry -->|"/redis-companion:rule path"| S
 
-    subgraph P["redis-companion"]
-        S[rule skill orchestrator]:::red
-        S -->|"Phase 1: dispatch DISCOVERY"| A1[acl-generator agent · DISCOVERY mode]:::red
-        A1 --> SCAN["Scan directory · detect client library\ncommands · key patterns · channels · streams\nINFO SERVER for version (MCP)"]:::node
-        SCAN -->|"discovery summary returned"| S
-        S -->|"Phase 2"| ASK[AskUserQuestion · interactive pause]:::red
-        ASK -->|"edition · version (confirm or ask) ·\ndefense-in-depth · granularity ·\nspeculation candidates (Q5)"| USER([User answers]):::entry
+    subgraph P["redis-companion plugin"]
+        S["<b>rule</b> skill orchestrator<br>inline · main conversation"]:::red
+
+        S -->|Phase 1| A1["<b>acl-generator</b> agent<br>DISCOVERY mode · Sonnet"]:::red
+        A1 --> SCAN["Read source files · detect client library<br>extract key/channel/stream patterns<br>INFO SERVER via MCP (version)"]:::node
+        SCAN -->|"structured discovery summary"| S
+
+        S -->|Phase 2| ASK["<b>AskUserQuestion</b><br>structured pause"]:::red
+        ASK -->|"4 baseline questions<br>+ Q5 if speculation candidate"| USER([User picks options]):::entry
         USER --> S
-        S -->|"Phase 3: dispatch SYNTHESIS\nwith discovery + answers"| A2[acl-generator agent · SYNTHESIS mode]:::red
-        A2 --> SYNTH["Version-aware category mapping\nfrom upstream-derived map · compose rule\nper-term annotations · apply instructions"]:::node
-        SYNTH -->|"final rule"| S
+
+        S -->|Phase 3| A2["<b>acl-generator</b> agent<br>SYNTHESIS mode · Sonnet"]:::red
+        A2 --> SYNTH["Look up commands in upstream-derived<br>command-category-map.md · filter by Since<br>compose rule + per-term annotations"]:::node
+        SYNTH -->|"comprehensive output"| S
+
+        S --> W["Write <b>./acl-rule-username.md</b><br>+ emit condensed prompt message<br>with rule + apply commands"]:::red
+
+        H["<b>credential-guard</b> hook<br>PreToolUse on Write/Edit"]:::hook
+        H -.->|"scans for literal credentials<br>recognized placeholders pass through"| W
     end
 
-    S --> U
+    W -->|"condensed prompt message"| U
+    W -->|"./acl-rule-username.md (audit artifact)"| U
 ```
 
-The plugin is five cooperating components, each doing one job. The `rule` skill orchestrates a three-phase flow: it dispatches the agent for **discovery**, pauses for **user input** via `AskUserQuestion`, then dispatches the agent again for **synthesis**. This pattern exists because Claude Code sub-agents run single-shot — they can't pause mid-execution to ask the user a question. So the interactive step lives in the inline skill, between two stateless agent dispatches.
+The plugin is five cooperating components, each doing one job. The `rule` skill orchestrates a three-phase flow: it dispatches the agent for **discovery**, pauses for **user input** via `AskUserQuestion`, then dispatches the agent again for **synthesis**. This pattern exists because Claude Code sub-agents run single-shot — they can't pause mid-execution to ask the user a question. So the interactive step lives in the inline skill, between two stateless sub-agent dispatches.
 
 ### Skill: `rule` (orchestrator)
 
-In `skills/rule/`. Triggered by `/redis-companion:rule <path>` or by natural-language requests. Runs inline in the main conversation. Owns the interactive contract: it dispatches the `acl-generator` agent in `DISCOVERY` mode, parses the structured findings, calls `AskUserQuestion` with the four baseline questions plus any conditional questions surfaced from discovery (speculation candidates, multi-language detection), then dispatches the agent again in `SYNTHESIS` mode with the user's answers baked in.
+In `skills/rule/`. Triggered by `/redis-companion:rule <path>` or by natural-language requests like *"scope a Redis ACL for ./my-service"*. Runs inline in the main conversation. Owns the interactive contract end-to-end: it dispatches the `acl-generator` agent in `DISCOVERY` mode, parses the structured findings, calls `AskUserQuestion` with the four baseline questions plus a fifth conditional question if discovery surfaced speculation candidates (TODOs near Redis calls), then dispatches the agent again in `SYNTHESIS` mode with the user's answers baked in.
 
-`AskUserQuestion` is the load-bearing primitive — it's the only Claude Code mechanism that actually pauses the conversation for structured user input. Natural-language "wait for the user" instructions don't enforce a pause, which is why earlier versions of this plugin had the agent skipping questions and silently picking defaults.
+`AskUserQuestion` is the load-bearing primitive — it's the only Claude Code mechanism that actually pauses the conversation for structured user input. Natural-language "wait for the user" instructions in agent prompts don't enforce a pause, which is why earlier versions of this plugin had the agent skipping questions and silently picking defaults.
+
+After synthesis returns, the skill writes the full output to `./acl-rule-<username>.md` in your cwd (the "comprehensive deliverable" — rule + annotations + detected context + four apply patterns + verify steps) and emits a **condensed** message in Claude Code with just the rule, the file location, and a short one-liner you can copy to apply. The long rule line itself never gets copy-pasted from the prompt — `grep` extracts it from the `.md` file at apply time, sidestepping terminal word-wrap and shell-quoting issues.
 
 ### Skill: `acl-reference` (knowledge base — model-invocable only)
 
@@ -174,7 +185,9 @@ In `skills/acl-reference/`. **Hidden from the user's `/` menu** via `user-invoca
 
 ### Agent: `acl-generator`
 
-Task executor, in `agents/acl-generator.md`. Operates in two modes — `DISCOVERY` (scan codebase, return structured findings, no questions, no synthesis) and `SYNTHESIS` (take findings + user answers, produce annotated rule). Read-only filesystem access; `Write`, `Edit`, `MultiEdit`, and `Bash` are disallowed in the agent frontmatter, leaving only `Read`, `Grep`, and `Glob` plus the Redis MCP `info` tool for code discovery and version detection.
+Task executor, in `agents/acl-generator.md`. **Runs on `claude-sonnet-4-6`** (set explicitly in the agent's frontmatter, not inherited from the user's session). Two-mode contract — `DISCOVERY` (scan codebase, return structured findings, no questions, no synthesis) and `SYNTHESIS` (take findings + user answers, look up commands in the upstream-derived category map, produce annotated rule). Read-only filesystem access; `Write`, `Edit`, `MultiEdit`, and `Bash` are disallowed in the frontmatter, leaving only `Read`, `Grep`, `Glob` plus the Redis MCP `info` tool for code discovery and version detection.
+
+**Why Sonnet, not Opus:** the agent's work is procedural lookup + composition (read files, look up commands in a static map, compose output following a fixed template). That's exactly where Opus's strength — open-ended creative reasoning — becomes a liability: early versions hit a bug where Opus reasoned *"PUBLISH writes to a channel, channels are write-like, so PUBLISH must be in @write"* and silently dropped pub/sub access from the rule. Sonnet follows imperative "look it up in the map, don't infer" instructions more literally. It's also ~2x faster, which materially changes the demo feel.
 
 When a client library method isn't in the skill's reference, the agent makes one targeted `WebFetch` to the library's official API docs before flagging it as uncertain. Hard fallback on ambiguity or fetch failure — no link-following, no retries.
 

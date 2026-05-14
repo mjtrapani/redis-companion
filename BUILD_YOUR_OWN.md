@@ -21,6 +21,12 @@ Four cooperating components, each doing one job:
 
 **Why this separation matters**: it lets the *agent* stay focused on its workflow, the *skill* stay focused on knowledge, the *hook* stay focused on safety, and the *MCP* stay focused on external integration. Each can be updated independently. A customer forking your plugin replaces the skill's reference docs and the agent's domain instructions — without rewriting anything else.
 
+## Two patterns inside the shape worth borrowing
+
+**Three-phase orchestration (skill → sub-agent → user → sub-agent).** Claude Code sub-agents run single-shot — they can't pause mid-execution to ask the user a question. So the user-interactive step lives in the *skill* (the orchestrator in the main conversation), via `AskUserQuestion`, between two stateless sub-agent dispatches: DISCOVERY (read code, return structured summary) → batched ask → SYNTHESIS (compose the artifact from the summary + answers). Keeps the sub-agent context-bounded and lets the user steer with structured choices instead of free-text.
+
+**Dual output (condensed prompt + comprehensive `.md` file).** Long generated artifacts get mangled by terminal copy-paste — word-wrap inserts hard breaks, shell-special chars need quoting, heredoc indentation breaks the terminator. Write the full artifact to a file in the user's cwd, then surface a short *extraction command* in the prompt: `grep -m1 '^ACL SETUSER' ./acl-rule-<user>.md | redis-cli`. The user copies a one-liner; the artifact itself is never copy-pasted. Generalizes to any domain where the artifact is more than ~120 chars (GRANT scripts, RBAC YAML, IAM JSON).
+
 ## Three concrete adaptations
 
 Same shape, different domain. Each one is a real plugin idea you could ship in a day.
@@ -67,14 +73,19 @@ Same shape, different domain. Each one is a real plugin idea you could ship in a
 
    The skill (`skills/acl-reference/`) becomes your domain's knowledge base. Rename the directory (e.g., to `postgres-grant-patterns`), update the `description` frontmatter in `SKILL.md` so it fires on your domain's keywords, and replace the four reference docs with your domain's syntax, version deltas, client-library patterns, and resource-extraction heuristics.
 
-3. **Adjust the agent's system prompt**
+   Two implementation notes that will save you an hour:
+   - **Reference paths**: when the agent reads these docs, use `${CLAUDE_SKILL_DIR}/references/<file>.md` in the agent prompt, not a relative path. Sub-agents inherit cwd from the user's invocation, not the plugin cache — relative paths silently read the wrong file (or fail outright).
+   - **Derive from upstream when possible**: if your domain has a source-of-truth artifact (a command JSON list, an API spec, an OpenAPI doc), generate your reference docs from it rather than hand-curating. We do this with `scripts/build-category-map.py`, which pulls `Since:` annotations from `redis/redis@8.6.3/src/commands/*.json` for 422 commands. Regenerating from upstream is a one-liner; staying in sync with upstream changes is automatic.
 
-   Open `agents/acl-generator.md` and rename it (e.g., `agents/grant-generator.md`). The 7-step process is reusable as scaffolding — keep the structure (load skill → discover from code → batched ask → optional MCP discovery → synthesize → emit → optional safety-gated apply). Replace:
-   - Step 2: detection patterns for your domain's client libraries
-   - Step 2b–2d: resource extraction (replace key/channel/stream with your domain's resource types)
-   - Step 3 questions: the batched ask. Keep the *pattern* (ask, don't infer, batch the questions). Replace the *contents* with what your domain needs.
-   - Step 5: synthesis logic. The `>50%` rule is Redis-specific — your domain may have different collapse heuristics.
-   - Step 6: output shape. Match your domain's deployment formats.
+3. **Adjust the agent's two modes**
+
+   Open `agents/acl-generator.md` and rename it (e.g., `agents/grant-generator.md`). The agent has two modes — the orchestrator skill dispatches each in a separate sub-agent call:
+   - **DISCOVERY** (steps D1–D9): scans code, returns a structured summary. Replace the detection patterns for your domain's client libraries and the resource-extraction logic (key/channel/stream → your domain's resource types).
+   - **SYNTHESIS** (steps S1–S3): takes the discovery summary plus the user's batched answers and composes the artifact. Replace the category-mapping logic, the collapse heuristic (the `>50%` rule is Redis-specific — your domain may have different ones), and the output shape.
+
+   The user-interactive step lives in `skills/rule/SKILL.md`, not the agent — that's where you replace the `AskUserQuestion` question set with your domain's choices (edition, version, granularity, deny clauses, etc.). Keep the *pattern* (ask the user, don't infer, batch within the 4-questions-per-call limit). Replace the *contents*.
+
+   **Optional: specify a model.** The agent has `model: claude-sonnet-4-6` in its frontmatter. Specifying `model:` is optional — useful for picking a cheaper or faster model when the sub-agent's job is procedural (follow steps, look things up in your reference docs) rather than open-ended reasoning. **Tightening the prompt does more for correctness than model selection** — early Opus runs of this agent reasoned creatively that `PUBLISH` belongs in `@write` because "publishing writes to channels," and the fix was a stricter S1 instruction ("use the map verbatim, do not infer from semantic similarity"), not the model swap.
 
 4. **Adapt the hook's pattern matchers**
 

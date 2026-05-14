@@ -1,6 +1,6 @@
 {
   "name": "redis-companion",
-  "description": "Claude Code plugin that reads your service's code and generates a least-privilege Redis ACL rule — version-aware, annotated, and optionally provisioned against a live Redis.",
+  "description": "Claude Code plugin that reads your service's code and generates a least-privilege Redis ACL rule — version-aware, annotated, and optionally validated against a live Redis.",
   "owner": {
     "name": "Marko Trapani"
   },
@@ -8,7 +8,7 @@
     {
       "name": "redis-companion",
       "description": "Generates a version-aware, annotated Redis ACL rule scoped to the minimum permissions your service actually needs. For backend engineers locking down new or existing services — reads the code, infers the access patterns, emits the rule.",
-      "version": "0.4.7",
+      "version": "0.4.8",
       "source": "./"
     }
   ]
