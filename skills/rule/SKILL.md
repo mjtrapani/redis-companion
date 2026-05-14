@@ -30,7 +30,7 @@ Then stop. Do not proceed without a path.
 
 Then proceed to the three phases below — discovery (sub-agent), batched ask (`AskUserQuestion`), and synthesis (sub-agent). Do not deviate from the order. Do not skip phases. Do not attempt the analysis yourself outside these phase boundaries.
 
-Why this structure exists: Claude Code sub-agents run single-shot — they can't pause mid-response to ask the user a question. So the interactive step lives in the skill (here, in the main conversation), via `AskUserQuestion`, between two stateless sub-agent dispatches. Read `.spec/EXPECTED_BEHAVIOR.md` if it's available to you for the full test oracle.
+Why this structure exists: Claude Code sub-agents run single-shot — they can't pause mid-response to ask the user a question. So the interactive step lives in the skill (here, in the main conversation), via `AskUserQuestion`, between two stateless sub-agent dispatches. Read `docs/EXPECTED_BEHAVIOR.md` if it's available to you for the full test oracle (the behavioral spec the plugin is scored against).
 
 ### Phase 1 — Discovery (sub-agent)
 
