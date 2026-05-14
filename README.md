@@ -286,7 +286,7 @@ The agent **flags but doesn't silently bake** these:
 
 ## What's next
 
-The biggest future-work items:
+The biggest future-work items, in rough priority order. The exhaustive list with detailed rationale for each item lives in [`docs/FUTURE_WORK.md`](./docs/FUTURE_WORK.md).
 
 - **Close the live-apply loop via a Redis ACL MCP** (see *Limitations* above for the gap). Three paths forward: (a) contribute ACL tools upstream to `redis/mcp-redis`, (b) build a sidecar MCP that wraps `redis-cli` for the ACL command family, or (c) extend the Redis Cloud admin MCP (today scoped to subscription/infra) with ACL/user/role endpoints. Any one of these unlocks the safety-gated apply → `ACL GETUSER` verify → impersonation-test workflow the agent already has scaffolded.
 - **Execute Enterprise provisioning end-to-end** — generate the REST API JSON payload and make the call, either by extending the Redis Cloud admin MCP (which today scopes to subscription/infra, not ACL/user/role) or by having the agent make raw Enterprise REST API calls.
