@@ -56,7 +56,8 @@ PLACEHOLDERS = {
 
 def is_placeholder(value: str) -> bool:
     """Heuristic: is this value an obvious placeholder, not a real credential?"""
-    v = value.strip().strip("\"'").lower()
+    raw = value.strip().strip("\"'")
+    v = raw.lower()
     if not v:
         return True
     if v in PLACEHOLDERS:
@@ -66,6 +67,15 @@ def is_placeholder(value: str) -> bool:
     if v.startswith("${") and v.endswith("}"):
         return True
     if re.fullmatch(r"\$[a-z_][a-z0-9_]*", v):
+        return True
+    # ALL_CAPS_WITH_UNDERSCORES form: classic env-var-style placeholder
+    # used in instructional examples — YOUR_STRONG_PASSWORD, REDIS_PASSWORD,
+    # MY_SECRET_TOKEN, etc. Conservative trade-off: a real password that
+    # happens to be all uppercase letters/numbers/underscores will pass
+    # through (we accept that — high-entropy real secrets are mixed-case
+    # with special chars, and the README documents this limitation
+    # explicitly under "What the hook doesn't cover").
+    if re.fullmatch(r"[A-Z][A-Z0-9_]*", raw):
         return True
     return False
 

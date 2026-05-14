@@ -237,14 +237,32 @@ sed 's/><changeme>/nopass/' ./acl-rule-<username>.md | grep -m1 '^ACL SETUSER' |
 1. Open `./acl-rule-<username>.md`, replace `<changeme>` with your password (or change `><changeme>` to `nopass`).
 2. Run: \`grep -m1 '^ACL SETUSER' ./acl-rule-<username>.md | redis-cli\`
 
-**Verify:**
+**Verify the rule landed:**
 
 \`\`\`
 redis-cli ACL GETUSER <username>
 \`\`\`
+
+**Smoke-test the service end-to-end** (this is the demo's strongest beat — apply the rule and prove the service still works under it):
+
+\`\`\`
+REDIS_URL='redis://<username>:@127.0.0.1:6379' python3 $ARGUMENTS/service.py
+\`\`\`
+
+(Note the trailing colon — `redis://user:@host` is the unambiguous nopass URL form. Plain `redis://user@host` confuses `redis-cli`/clients into using `user` as a password for `default`.) Expect `6/6 operations succeeded` if applicable. For a passworded apply, use `redis://<username>:${REDIS_PASS}@127.0.0.1:6379`.
+
+**Negative test** (confirm denies actually deny):
+
+\`\`\`
+redis-cli -u 'redis://<username>:@127.0.0.1:6379' FLUSHDB
+\`\`\`
+
+Expected: `(error) NOPERM User <username> has no permissions to run the 'flushdb' command`.
 ```
 
-The user copies the `grep ... | redis-cli` command (short, paste-safe) and the `redis-cli ACL GETUSER` command from the prompt — both fit on one line and contain no shell-sensitive characters. The rule itself is extracted by `grep` from the `.md` file, never copy-pasted.
+The user copies the short paste-safe one-liners from the prompt — apply, verify, smoke-test, negative-test — each fits on one line. The rule itself is extracted by `grep` from the `.md` file, never copy-pasted from the prompt.
+
+**Important:** the smoke-test path assumes the analyzed directory contains a runnable `service.py` (true for the bundled `examples/sample-service/`). If the path doesn't have a `service.py` at its root (e.g., a multi-module service), substitute the actual entrypoint or omit the smoke-test block. The agent's discovery output tells you the actual entry-point file path — use that.
 
 If the user wants to see the per-term annotations or the full apply pattern alternatives, they `cat` the file or open it in an editor. The condensed prompt message tells them where to look.
 
