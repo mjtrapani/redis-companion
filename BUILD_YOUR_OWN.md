@@ -10,11 +10,14 @@ A Claude Code plugin that reads code in your repo and emits a piece of configura
 
 ## Before you start: pick a domain you can steer Claude in as a peer
 
-The single most important factor in this plugin working out well wasn't the architecture — it was the **steering moments**. When Claude wrote confident method-to-command mappings, I caught myself trusting them without knowing the source. When Claude was going to derive the category map from documentation, I knew to push for a more authoritative source (the upstream `commands.json` files). Both redirects required real Redis ACL domain knowledge.
+The single most important factor in this plugin working out well wasn't the architecture — it was the **steering moments**. Domain expertise matters in two distinct ways:
 
-**Pick a workflow you actually understand.** A syntax you've debugged before, a system you've ops'd, a config you've written by hand. Claude drafts confidently in any domain; your job as the plugin author is to catch where its draft is wrong, under-sourced, or oversimplified. That requires actual expertise. A plugin built for a domain you don't deeply understand is a plugin where Claude's bluffs ship as features.
+1. **Catching errors in Claude's confident drafts.** When Claude wrote method-to-command mappings for the Redis client libraries, I caught myself trusting them without knowing the source. When Claude was going to derive the category map from documentation, I knew to push for a more authoritative source (the upstream `commands.json` files). Both redirects required real Redis ACL domain knowledge.
+2. **Steering principled design decisions and tradeoffs.** Should the plugin ask the user about defense-in-depth deny clauses, or hardcode them off because they're functionally redundant with strict grants? Strict individual grants vs. category-collapse — when does the briefer rule shed too much precision? Should the long rule line live inline in the prompt or in a markdown file the user `grep`s from? These aren't questions Claude can decide on its own — they require understanding the domain's failure modes and the user's actual workflow.
 
-If you can't steer it as a peer, the plugin will look polished and be subtly wrong — which is worse than not shipping one at all.
+**Pick a workflow you actually understand.** A syntax you've debugged before, a system you've ops'd, a config you've written by hand. Claude drafts confidently in any domain; without real expertise, you can't tell where its drafts are wrong AND you can't steer the architectural tradeoffs that determine whether the plugin is genuinely useful.
+
+If you can't steer Claude as a peer — both correcting it and making design calls together — the plugin will look polished and be subtly wrong. That's worse than not shipping one at all.
 
 ## The shape that worked here
 
