@@ -17,7 +17,7 @@ The single most important factor in this plugin working out well wasn't the arch
 
 **Pick a workflow you actually understand.** A syntax you've debugged before, a system you've ops'd, a config you've written by hand. Claude drafts confidently in any domain; without real expertise, you can't tell where its drafts are wrong AND you can't steer the architectural tradeoffs that determine whether the plugin is genuinely useful.
 
-If you can't steer Claude as a peer — both correcting it and making design calls together — the plugin will look polished and be subtly wrong. That's worse than not shipping one at all.
+If you can't steer Claude as a peer — both correcting it and making design calls together — the plugin may look polished and be subtly wrong.
 
 ## The shape that worked here
 
