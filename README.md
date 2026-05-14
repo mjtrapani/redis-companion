@@ -1,6 +1,6 @@
 # redis-companion
 
-A Claude Code plugin that reads your service's code and generates a least-privilege Redis ACL rule — version-aware, with per-term annotations. Outputs both a concise prompt-ready summary and a full markdown artifact you can review, version-control, and apply with one shell command.
+A Claude Code plugin that reads your service's code and generates a least-privilege Redis ACL rule — version-aware, with per-term annotations. Outputs both a concise prompt-ready summary and a full markdown artifact for review. Apply the rule with one shell command.
 
 ---
 
