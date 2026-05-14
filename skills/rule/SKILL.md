@@ -1,5 +1,5 @@
 ---
-description: Generate a least-privilege Redis ACL rule for the codebase at the given path. Use when invoked via `/redis-companion:rule <path>` or when the user explicitly asks to scope or generate a Redis ACL rule for a service with a path argument. Orchestrates the `acl-generator` agent across two phases (discovery, synthesis) and gathers user input between them via `AskUserQuestion`.
+description: Generate a least-privilege Redis ACL rule for the codebase at the given path. Use when invoked via `/redis-companion:rule <path>` or when the user explicitly asks to scope or generate a Redis ACL rule for a service with a path argument. Orchestrates the `redis-companion:acl-generator` agent across two phases (discovery, synthesis) and gathers user input between them via `AskUserQuestion`.
 ---
 
 # Generate a Redis ACL rule for a service
@@ -16,7 +16,7 @@ Respond exactly with:
 >
 > **Example:** `/redis-companion:rule ./my-service`
 >
-> If you want a more conversational entry point, just say something like *"scope a Redis ACL for ./my-service"* and Claude will route you to the `acl-generator` agent.
+> If you want a more conversational entry point, just say something like *"scope a Redis ACL for ./my-service"* and Claude will route you to the `redis-companion:acl-generator` agent.
 
 Then stop. Do not proceed without a path.
 
@@ -34,7 +34,7 @@ Why this structure exists: Claude Code sub-agents run single-shot — they can't
 
 ### Phase 1 — Discovery (sub-agent)
 
-Spawn the `acl-generator` sub-agent via the Task tool with this prompt:
+Spawn the `redis-companion:acl-generator` sub-agent via the Task tool — pass `redis-companion:acl-generator` as the `subagent_type` (plugin agents require the fully-qualified namespaced name; the unqualified `acl-generator` will not resolve). Use this prompt:
 
 > **Mode: DISCOVERY ONLY.**
 >
@@ -157,7 +157,7 @@ Do not narrate before/after the calls — let the structured UI carry the intera
 - **If Phase 1's discovery summary included a `redis_version` from `INFO SERVER` (e.g., `8.6.3`):** use that exact version. The agent will filter the category map by `Since: <= 8.6.3`, so commands like `HEXPIRE` (Since 7.4.0) are included only if 7.4.0 ≤ 8.6.3 — yes, included.
 - **If Phase 1 reported "MCP not connected":** the user picked both major (Q2 major) and minor (the follow-up minor-version question). Combine into a precise version cutoff, e.g., "Redis 7.4" → effective version `7.4`. Filter by `Since: <= 7.4`. No assumption needed — the user told us.
 
-Spawn the `acl-generator` agent with this prompt:
+Spawn the `redis-companion:acl-generator` agent (same dispatch rule as Phase 1 — fully-qualified `subagent_type`) with this prompt:
 
 > **Mode: SYNTHESIS.**
 >

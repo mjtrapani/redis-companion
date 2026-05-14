@@ -5,7 +5,7 @@ user-invocable: false
 
 # acl-reference
 
-Knowledge base for Redis Access Control Lists (ACLs). Model-invocable only — Claude auto-loads this skill when the conversation touches Redis client code, ACL rule construction, or ACL syntax discussion. It's also loaded explicitly by the companion `acl-generator` agent at task start.
+Knowledge base for Redis Access Control Lists (ACLs). Model-invocable only — Claude auto-loads this skill when the conversation touches Redis client code, ACL rule construction, or ACL syntax discussion. It's also loaded explicitly by the companion `redis-companion:acl-generator` agent at task start.
 
 Why hidden from the user's slash menu: invoking a knowledge base via `/` isn't a meaningful action. When a user asks a question like *"what does `+@read` grant in Redis 7?"*, the skill description matches and Claude loads this content automatically — no slash command needed. For *actions* (generating a rule for a specific service), use `/redis-companion:rule <path>` instead.
 
@@ -141,9 +141,9 @@ Fall back to the static command-category-map reference (path below) only when no
 
 ---
 
-## Companion: the `acl-generator` agent
+## Companion: the `redis-companion:acl-generator` agent
 
-If the user wants to **generate a complete Redis ACL rule for a specific service** (rather than discuss the syntax in the abstract), invoke the `acl-generator` agent. It:
+If the user wants to **generate a complete Redis ACL rule for a specific service** (rather than discuss the syntax in the abstract), invoke the `redis-companion:acl-generator` agent (plugin agents are dispatched via the fully-qualified namespaced name; the unqualified `acl-generator` will not resolve). It:
 
 - Scans the target codebase for Redis usage
 - Asks the user for edition (OSS vs Enterprise), version, and defense-in-depth preference
@@ -153,4 +153,4 @@ If the user wants to **generate a complete Redis ACL rule for a specific service
 Invocation paths:
 - Natural language: *"scope an ACL for ./my-service"*
 - Slash command: `/redis-companion:rule <path>`
-- Agent picker: `/agents` → `acl-generator`
+- Agent picker: `/agents` → `redis-companion:acl-generator`
