@@ -17,13 +17,26 @@ Invoked at the start of an analysis. Your job: scan the target codebase, build a
 
 ### Discovery process
 
-#### D1. Load reference knowledge (once)
+#### D1. Load reference knowledge — LAZY, only if needed
 
-Invoke the `redis-companion:acl-reference` skill once so the Redis ACL syntax, command-category mappings, version deltas, client library call patterns, and the key-pattern-extraction heuristics are in context. If the skill content is already visible in your context (look for the heading "Redis ACL Syntax Reference"), do not re-invoke.
+**Discovery does not need the full reference suite by default.** For the well-known clients (`redis-py`, `ioredis`, `go-redis`) and standard methods (`set`, `get`, `mget`, `setex`, `hset`, `lpush`, `publish`, `xadd`, etc.), your training data is sufficient to map methods to Redis commands.
 
-#### D2. Detect Redis client library
+Only invoke the `redis-companion:acl-reference` skill if:
+- The client library is one you don't recognize (Java, Rust, .NET, etc.), OR
+- You encounter a method call that's ambiguous and you need the caveats from `client-library-patterns.md` (e.g., scripting helpers, locks, transactional pipelines, subcommand-named methods, Sentinel/Cluster client mode, sharded pub/sub), OR
+- You need the key-pattern-extraction case table to resolve a tricky pattern
 
-Look for:
+If none of those apply, skip the skill invocation entirely. The synthesis phase loads what it needs.
+
+#### D2. Detect Redis client library — source files and package files only
+
+**Read only source files and package manifests.** Do NOT read service-internal docs (`README.md`, `CHANGELOG.md`, `LICENSE`, `CONTRIBUTING.md`, `docs/*`, etc.) — they describe what the service does for end users, not how it talks to Redis. Reading them is wasted tool calls and doesn't inform the ACL rule.
+
+Permitted file targets for D2 through D6:
+- Source files: `*.py`, `*.js`, `*.ts`, `*.go`, `*.java`, `*.rs`, `*.rb`, `*.php`, etc.
+- Package manifests: `requirements.txt`, `pyproject.toml`, `Pipfile`, `package.json`, `go.mod`, `Cargo.toml`, `Gemfile`, `pom.xml`, `composer.json`, etc.
+
+Detection signals:
 - **Python**: `import redis`, `from redis import`, plus `redis` in `requirements.txt` / `pyproject.toml` / `Pipfile`
 - **Node.js**: `redis` or `ioredis` in `package.json`, plus matching imports
 - **Go**: `github.com/redis/go-redis` (or older `github.com/go-redis/redis`) in `go.mod`, plus matching imports

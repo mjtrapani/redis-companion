@@ -38,7 +38,11 @@ Spawn the `acl-generator` sub-agent via the Task tool with this prompt:
 
 > **Mode: DISCOVERY ONLY.**
 >
-> Analyze the codebase at `$ARGUMENTS` for Redis client usage. Run steps 1, 2, and 2h from your standard process (load reference knowledge, scan codebase, INFO SERVER via MCP if connected). Then **return a structured discovery summary and stop. Do not ask any questions. Do not synthesize a rule.**
+> Analyze the codebase at `$ARGUMENTS` for Redis client usage. Run steps D1–D9 from your DISCOVERY mode. Then **return a structured discovery summary and stop. Do not ask any questions. Do not synthesize a rule.**
+>
+> **Read only source files and package manifests.** Do NOT read service-internal docs (`README.md`, `CHANGELOG.md`, `LICENSE`, `CONTRIBUTING.md`, `docs/*`, etc.) — they describe what the service does for end users, not how it talks to Redis. They don't inform the ACL rule.
+>
+> **Lazy-load the `acl-reference` skill** — only invoke it if you encounter a non-standard client library or an ambiguous method call (scripting helpers, locks, transactional pipelines, subcommand-named methods, Sentinel/Cluster client mode, sharded pub/sub). For the well-known clients (`redis-py`, `ioredis`, `go-redis`) with standard methods, your training data is sufficient and the skill invocation is wasted tool calls.
 >
 > Your structured summary must include:
 > - **Client library** (name + how detected, e.g., `redis-py` from `from redis import Redis` in service.py:10)
