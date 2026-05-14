@@ -110,7 +110,7 @@ For anyone forking the plugin: this file is the behavioral spec your fork should
 
 ## Phase 3 — Batched ask (via `AskUserQuestion`)
 
-**Expected:** The skill calls `AskUserQuestion` **once** with all baseline questions plus Q5 (conditional on speculation candidate found in Phase 2). Each question is structured with options the user picks from.
+**Expected:** The skill calls `AskUserQuestion` **once** with all baseline questions plus Q3 (conditional on speculation candidate found in Phase 2). Each question is structured with options the user picks from.
 
 **Verbatim question texts** (the skill must ask these — wording can vary slightly but the *semantics* are fixed):
 
@@ -142,24 +142,14 @@ Options:
 - **Redis 7** — `@scripting` is its own category; selectors and `%R~`/`%W~` available; pub/sub default-deny
 - **Redis 8** — All Redis 7 features plus standard categories include module commands
 
-### Q3: Defense-in-depth denies?
+### v1 design choices (no longer asked)
 
-> Should I include explicit deny clauses (`-@admin -@dangerous`) even when those categories aren't used by the service?
+Two questions were intentionally removed in v1 in favor of safe hardcoded defaults:
 
-Options:
-- **Yes (recommended)** — Industry best practice for service accounts; prevents accidental category-grant overreach (e.g., `+@write` would otherwise pull in `FLUSHDB`)
-- **No** — Only emit positive grants. Tighter rule body, but relies on you to remember the denies in your provisioning script
+- **Permission granularity is always "strict least-privilege".** Individual command grants only; never collapse to `+@category` regardless of usage ratios. Safest default; removes a confusing user-facing choice. The agent's S2 step retains the balanced/brevity logic for future re-enablement.
+- **Defense-in-depth denies (`-@admin -@dangerous`) are always omitted.** With strict individual grants and the `nocommands` baseline (= `-@all`), the user has zero permissions by default and only the explicitly-granted 6 commands are runnable. None of those 6 are in `@admin` or `@dangerous`, so adding the denies would remove categories that were never granted — a functional no-op that just adds visual noise. Defense-in-depth denies matter when using `+@category` grants, which v1 never emits.
 
-### Q4: Permission granularity?
-
-> Which permission granularity do you want?
-
-Options:
-- **Strict least-privilege** — Grant only the 6 specific commands. Never collapse to category, even if >50% of a category is used
-- **Balanced (recommended)** — If >50% of a category's commands are used, ask whether to collapse. Else, individual grants
-- **Favor brevity** — Auto-collapse to `+@category` whenever >50% of a category is used. Shorter rule, slightly broader access
-
-### Q5 (conditional): Speculation candidate
+### Q3 (conditional): Speculation candidate
 
 > I noticed a `# TODO: add a subscribe handler` at service.py:40, suggesting `SUBSCRIBE` may be added later. Should I include `+SUBSCRIBE` and `&notifications` channel grants now, or leave them out (you can re-run me when subscribe is actually wired up)?
 
@@ -169,8 +159,8 @@ Options:
 
 **Pass criteria for Phase 3:**
 - `AskUserQuestion` is called (this is enforced — the parent CAN'T continue without user input)
-- All four baseline questions present, in order, with semantically-correct option lists
-- Q5 fires because Phase 2 flagged the TODO
+- Both baseline questions (Q1 edition, Q2 version) present, in order, with semantically-correct option lists
+- Q3 fires because Phase 2 flagged the TODO
 - No questions about "flat vs selector-scoped" (that's an output detail, not a user-facing choice)
 - No "run live MCP verification?" prompt (we already read version in Phase 2; no other MCP discovery needed)
 - No fallback "if you just say go, I'll pick defaults" — the user MUST answer
@@ -183,14 +173,14 @@ Options:
 - The discovery summary from Phase 2
 - The user's answers from Phase 3
 
-The agent applies version-aware category mapping, granularity preference, defense-in-depth denies, and emits the final rule.
+The agent applies version-aware category mapping and emits the final rule. Granularity is hardcoded to strict; defense-in-depth denies are omitted (see *v1 design choices* in Phase 3 above).
 
-**For the demo test case** (OSS, Redis 8, defense-in-depth yes, strict, leave-out speculation):
+**For the demo test case** (OSS, Redis 8.6.3, leave-out speculation):
 
 **Pass criteria — the rule must be exactly:**
 
 ```
-ACL SETUSER sample-service on ><changeme> resetkeys ~activity:events ~cache:user:* ~session:* resetchannels &notifications nocommands +SET +SETEX +XADD +GET +MGET +PUBLISH -@admin -@dangerous
+ACL SETUSER sample-service on ><changeme> resetkeys ~activity:events ~cache:user:* ~session:* resetchannels &notifications nocommands +SET +SETEX +XADD +GET +MGET +PUBLISH
 ```
 
 **Where:**
@@ -200,9 +190,9 @@ ACL SETUSER sample-service on ><changeme> resetkeys ~activity:events ~cache:user
 - Key patterns: `~activity:events`, `~cache:user:*`, `~session:*` (alphabetical — these are a flat list, no semantic grouping makes sense)
 - Single channel: `&notifications`
 - **`nocommands`** (alias for `-@all`) is the baseline deny — without this, the user could run any command not in @admin/@dangerous (e.g., `BITFIELD`, `RPOPLPUSH`). Required for true least-privilege.
-- Positive grants **grouped by category, in code-flow order**: writes (`+SET +SETEX +XADD`), reads (`+GET +MGET`), pubsub (`+PUBLISH`). Strict per Q4 — no `+@write` collapse despite SET/SETEX/XADD being three @write members.
-- No `+SUBSCRIBE` (because user picked "leave out" for Q5)
-- **Defense-in-depth denies last** (`-@admin -@dangerous`): later rules win when overlap exists. For strict grants this is documentation/policy intent; for category-grant rules (balanced/brevity granularity) it's functionally required to deny dangerous commands within granted categories (`+@write -@dangerous` correctly denies `FLUSHDB`).
+- Positive grants **grouped by category, in code-flow order**: writes (`+SET +SETEX +XADD`), reads (`+GET +MGET`), pubsub (`+PUBLISH`). Strict per v1 default — no `+@category` collapse.
+- No `+SUBSCRIBE` (because user picked "leave out" for Q3 speculation)
+- **No trailing `-@admin -@dangerous`** — v1 omits them. With `nocommands` baseline and strict individual grants, the user has no permissions for admin/dangerous commands; adding explicit denies would remove categories that were never granted.
 
 ---
 
@@ -217,7 +207,7 @@ Required sections, in order:
 #### A.1. The `ACL SETUSER` command (or rule body for Enterprise)
 
 ```
-ACL SETUSER sample-service on ><changeme> resetkeys ~activity:events ~cache:user:* ~session:* resetchannels &notifications nocommands +SET +SETEX +XADD +GET +MGET +PUBLISH -@admin -@dangerous
+ACL SETUSER sample-service on ><changeme> resetkeys ~activity:events ~cache:user:* ~session:* resetchannels &notifications nocommands +SET +SETEX +XADD +GET +MGET +PUBLISH
 ```
 
 Must appear on its own line starting with `ACL SETUSER ` so the `grep -m1 '^ACL SETUSER'` apply pattern works.
@@ -245,15 +235,13 @@ A clearly-flagged note (callout block, blockquote, or boldface line — visible 
 | `~session:*` | Read/write `session:*` keys | `service.py:16` (`SESSION_PREFIX`); `service.py:36` (create_session) |
 | `resetchannels` | Wipes any pre-existing `&pattern` grants on this user | Self-contained rule; also relevant because pub/sub defaults to restrictive on Redis 7+ |
 | `&notifications` | Publish/subscribe on `notifications` channel | `service.py:17` (`NOTIFY_CHANNEL`); `service.py:41` (notify → PUBLISH) |
-| `nocommands` | Deny all commands as baseline (alias for `-@all`) | Required for true least-privilege — without this, the user could run any command not in `@admin`/`@dangerous` |
+| `nocommands` | Deny all commands as baseline (alias for `-@all`) | Required for true least-privilege — without this, the user could run any command not explicitly denied |
 | `+SET` | Single-key write | `service.py:22` (cache_user) |
 | `+SETEX` | Write with TTL | `service.py:36` (create_session) |
 | `+XADD` | Append to stream | `service.py:44` (record_activity) |
 | `+GET` | Single-key read | `service.py:26` (get_user) |
 | `+MGET` | Multi-key read | `service.py:31` (get_users) |
 | `+PUBLISH` | Publish on channel | `service.py:41` (notify) |
-| `-@admin` | Deny admin commands (CONFIG, DEBUG, SHUTDOWN, etc.) | Defense-in-depth (asked Q3); documentation of intent for strict rules |
-| `-@dangerous` | Deny dangerous commands (FLUSHDB, KEYS, MIGRATE, etc.) | Defense-in-depth (asked Q3); critical when granularity is balanced/brevity since `+@write` would otherwise pull in `FLUSHDB` |
 
 #### A.4. "Detected context" block
 
@@ -261,8 +249,8 @@ A clearly-flagged note (callout block, blockquote, or boldface line — visible 
 - **Client library:** redis-py (from `requirements.txt`: redis>=5.0.0)
 - **Target Redis edition:** OSS (asked)
 - **Target Redis version:** 8.6.3 (read from `INFO SERVER` via MCP; effective version for filtering)
-- **Defense-in-depth denies:** included (asked)
-- **Permission granularity:** balanced — no category collapsed (no category > 50% used)
+- **Permission granularity:** strict least-privilege (hardcoded in v1)
+- **Defense-in-depth denies:** omitted (hardcoded in v1 — see *v1 design choices*)
 - **Speculation candidate (service.py:40 TODO):** left out (asked)
 - **MCP status:** connected — Redis version read from `INFO SERVER`
 - **Mapping notes:** No ambiguous mappings detected
@@ -285,7 +273,7 @@ A clearly-flagged note (callout block, blockquote, or boldface line — visible 
 
 Required content (terse — the user reads the prompt for *what they need next*, not for full detail):
 
-1. **Header:** `✅ Rule generated for sample-service (Redis OSS 8.6.3, 6 commands, Balanced granularity)`
+1. **Header:** `✅ Rule generated for sample-service (Redis OSS 8.6.3, 6 commands, strict least-privilege)`
 2. **The rule** in a fenced code block (so the user can see the shape of what was generated)
 3. **Pointer to `./acl-rule-sample-service.md`** for per-term annotations, detected context, full apply-pattern alternatives
 4. **Apply one-liner:** `sed 's/><changeme>/nopass/' ./acl-rule-sample-service.md | grep -m1 '^ACL SETUSER' | redis-cli` (plus a passworded variant)
@@ -293,7 +281,7 @@ Required content (terse — the user reads the prompt for *what they need next*,
 6. **Verify command:** `redis-cli ACL GETUSER sample-service`
 7. **Smoke-test command:** `REDIS_URL='redis://sample-service:@127.0.0.1:6379' python3 examples/sample-service/service.py` (note the colon-no-password URL form)
 8. **Negative-test command:** `redis-cli -u 'redis://sample-service:@127.0.0.1:6379' FLUSHDB` (expects NOPERM)
-9. **Speculation note** if Q5 was answered "leave out": *"the TODO at service.py:40 was left out per your choice — re-run /redis-companion:rule once SUBSCRIBE is wired up"*
+9. **Speculation note** if Q3 was answered "leave out": *"the TODO at service.py:40 was left out per your choice — re-run /redis-companion:rule once SUBSCRIBE is wired up"*
 
 ### What the output must NOT do
 
@@ -313,7 +301,7 @@ If any of these happen, the test fails:
 | 1 | Skill jumps straight to synthesis without asking | Step 3 boundary broken |
 | 2 | Skill asks questions in free-form text instead of via `AskUserQuestion` | Interactivity pattern not implemented |
 | 3 | Skill paraphrases questions (e.g., "flat vs selectors", "live MCP verification?") | Question template not respected |
-| 4 | Q5 doesn't fire despite TODO at L40 | Speculation candidate not surfaced |
+| 4 | Q3 doesn't fire despite TODO at L40 | Speculation candidate not surfaced |
 | 5 | Agent calls `scan_keys`, `redis-cli` via Bash, or any data-reading MCP tool | Tool discipline broken |
 | 6 | Placeholder is anything other than `><changeme>` | Placeholder drift |
 | 7 | Detected-context block claims MCP can apply | False capability claim |
@@ -329,9 +317,9 @@ Once the OSS happy-path works, also verify:
 
 1. **Enterprise edition** (answer Q1 = Enterprise): output is rule body only (no `ACL SETUSER`, no `>password`), with admin UI / REST API instructions
 2. **Redis 6** (answer Q2 = 6): output omits `@scripting` (folded into `@write`), no selectors, no `%R~`/`%W~`
-3. **Defense-in-depth = No** (Q3): output drops `-@admin -@dangerous`
-4. **Granularity = Favor brevity** (Q4): if any category > 50% used, output uses `+@category` instead of individual commands
-5. **Q5 = Include now**: output includes `+SUBSCRIBE` and `&notifications` (already there for PUBLISH, but explicit grant is fine)
+3. ~~Defense-in-depth toggled off~~ — no longer applicable in v1 (always off)
+4. ~~Granularity = Favor brevity~~ — no longer applicable in v1 (always strict)
+5. **Q3 = Include now**: output includes `+SUBSCRIBE` and `&notifications` (already there for PUBLISH, but explicit grant is fine)
 6. **No MCP connected** (`REDIS_URL` unset, Redis stopped): skill still works; Q2 must be asked (no `INFO SERVER`); detected-context says MCP not connected
 
 These are the secondary paths the primary test (OSS, Redis 8.6.3, MCP connected, balanced, leave-out) doesn't exercise. Run the primary first; treat the variations as time permits.

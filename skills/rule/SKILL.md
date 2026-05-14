@@ -60,7 +60,7 @@ Wait for the agent's return. Read the discovery summary carefully — you will u
 
 ### Phase 2 — Batched ask (AskUserQuestion)
 
-Use the `AskUserQuestion` tool to ask the user **all baseline questions at once, plus Q5 if Phase 1 surfaced any speculation candidates**. This is the only Claude Code primitive that actually pauses the conversation for structured user input — natural-language "wait for the user" instructions don't enforce a pause.
+Use the `AskUserQuestion` tool to ask the user **both baseline questions at once, plus Q3 if Phase 1 surfaced any speculation candidates**. This is the only Claude Code primitive that actually pauses the conversation for structured user input — natural-language "wait for the user" instructions don't enforce a pause.
 
 Construct the question set as follows.
 
@@ -82,7 +82,7 @@ If Phase 1's discovery summary included a version from `INFO SERVER` (e.g., `8.6
   - label: "Yes, use Redis <X.Y.Z> (recommended — matches the live server)" — description: "Effective version <X.Y.Z>. The category map filters by `Since: <= <X.Y.Z>`."
   - label: "Override — I want to specify a different version" — description: "I'll ask you for the major and minor version next (useful if you're generating a rule for a different deployment than the one this MCP is connected to)."
 
-If the user picks "Override", treat this as if MCP did not provide a version: fire the major-version question, then the minor-version follow-up. Continue with Q3 / Q4 after.
+If the user picks "Override", treat this as if MCP did not provide a version: fire the major-version question, then the minor-version follow-up. Continue with Q3 (speculation) if applicable.
 
 If MCP did NOT provide a version, present as an open question. **Order: newest version FIRST** (Redis 8 = most-likely target for greenfield, most-features):
 - header: "Version"
@@ -118,22 +118,12 @@ If user picked **Redis 6**:
   - label: "Redis 6.2 (recommended — latest 6.x)" — description: "Effective version 6.2. Channel ACLs available; BITFIELD_RO added."
   - label: "Redis 6.0" — description: "Effective version 6.0. No channel ACLs; minimal ACL feature set."
 
-**Q3 — Defense-in-depth denies:**
-- header: "Deny clauses"
-- question: "Include explicit deny clauses (`-@admin -@dangerous`) even when those categories aren't used by the service?"
-- options:
-  - label: "Yes (recommended)" — description: "Industry best practice for service accounts. Prevents accidental category-grant overreach (e.g., `+@write` would otherwise pull in `FLUSHDB`)."
-  - label: "No" — description: "Only emit positive grants. Tighter rule body, but relies on you to remember the denies in your provisioning script."
+**Two design choices that simplify the v1 question set:**
 
-**Q4 — Permission granularity** (Balanced first — it's the recommended default):
-- header: "Granularity"
-- question: "Which permission granularity do you want?"
-- options:
-  - label: "Balanced (recommended)" — description: "If >50% of a category's commands are used, ask whether to collapse. Else, individual grants."
-  - label: "Strict least-privilege" — description: "Grant only the specific commands your code uses. Never collapse to category, regardless of usage percentage."
-  - label: "Favor brevity" — description: "Auto-collapse to `+@category` whenever >50% is used. Shorter rule, slightly broader access."
+- **Permission granularity is hardcoded to "strict least-privilege".** The agent grants only the specific commands the service uses, never collapses to `+@category` regardless of usage ratios. Strict is the safest default; removing the choice removes a confusing decision point. The agent's S2 step still has the balanced/brevity logic in its prompt for future re-enablement, but the skill never passes anything other than "strict" today.
+- **Defense-in-depth category denies (`-@admin -@dangerous`) are omitted from the rule body.** They only matter functionally when the rule uses `+@category` grants — `+@write` would pull in `FLUSHDB`, etc., and the deny clauses prevent that. With strict individual grants and the `nocommands` baseline (which is `-@all`, denying everything by default), `-@admin -@dangerous` are no-ops — they remove categories that were never granted. Including them would just be visual noise. The user's command grants are already limited to what the service uses.
 
-**Q5 (conditional — only if Phase 1 surfaced speculation candidates):**
+**Q3 (conditional — only if Phase 1 surfaced speculation candidates):**
 
 For each speculation candidate, add a question. **Leave out first — it's the safer default.** For example, a TODO at service.py:40 suggesting `SUBSCRIBE` is planned:
 - header: "Speculation"
@@ -142,13 +132,13 @@ For each speculation candidate, add a question. **Leave out first — it's the s
   - label: "Leave out (recommended)" — description: "Stricter least-privilege. Re-run me when subscribe is actually wired up."
   - label: "Include now" — description: "Grant `+SUBSCRIBE`. Rule covers the planned addition without re-running."
 
-**Calling `AskUserQuestion`:** the platform limit is 4 questions per call. Plan your calls:
+**Calling `AskUserQuestion`:** the platform limit is 4 questions per call. With only two baseline questions, this fits comfortably. Plan your calls:
 
-- **MCP-provided version, user confirms (most common):** Single call = Q1, Q2 (confirm-or-override), Q3, Q4. If speculation candidates were found, fire a follow-up call with Q5. Done — no minor follow-up needed because the user accepted the MCP-detected exact version.
-- **MCP-provided version, user picks "Override":** First call already included Q1–Q4. After processing the override, fire follow-up call(s) for the major version, the minor version, and (if applicable) Q5. Treat exactly like the no-MCP path from this point.
-- **No MCP version (MCP not connected):** Call 1 = Q1, Q2 (major), Q3, Q4. Call 2 = minor-version follow-up for the user's Q2 major answer. Call 3 = Q5 (only if speculation candidates were found).
+- **MCP-provided version, user confirms (most common):** Single call = Q1, Q2 (confirm-or-override). If speculation candidates were found, fire a follow-up call with the Q3 speculation question(s).
+- **MCP-provided version, user picks "Override":** First call already included Q1–Q2. After processing the override, fire follow-up call(s) for the major version, the minor version, and (if applicable) Q3 speculation.
+- **No MCP version (MCP not connected):** Call 1 = Q1, Q2 (major). Call 2 = minor-version follow-up for the user's Q2 major answer. Call 3 = Q3 speculation (only if Phase 1 surfaced candidates).
 
-Do not narrate before/after the calls — let the structured UI carry the interaction.
+Do not narrate before/after the calls. `AskUserQuestion` renders its own UI in Claude Code (the question text + option chips appear as a structured prompt, separate from your regular text output), so wrapping it with *"I'll now ask you a few questions"* or *"Thanks for those answers"* just adds visual noise — the structured prompt is self-contained.
 
 ### Phase 3 — Synthesis (sub-agent)
 
@@ -170,19 +160,19 @@ Spawn the `redis-companion:acl-generator` agent (same dispatch rule as Phase 1 �
 > The user answered:
 > - Edition: <answer to Q1>
 > - Version (major): <answer to Q2>
-> - Defense-in-depth denies: <answer to Q3>
-> - Granularity: <answer to Q4>
-> - Speculation candidates: <answer(s) to Q5, one per candidate>
+> - Speculation candidates: <answer(s) to Q3, one per candidate>
+>
+> **Hardcoded for v1:** granularity is "strict least-privilege" (never collapse to `+@category`), and the rule body does NOT include `-@admin -@dangerous` defense-in-depth denies (they're functional no-ops when the rule uses `nocommands` baseline + individual command grants — the user can't run @admin/@dangerous commands they weren't explicitly granted).
 >
 > **Effective target version for filtering: `<exact_version>`** (either from `INFO SERVER` directly, or the assumed latest minor of the user's major-version pick — state which one explicitly here). Filter the `command-category-map.md` such that only commands with `Since: <= <exact_version>` are eligible. Surface this version assumption in the Detected Context output.
 >
-> Run S1 (map commands → categories with version filtering), S2 (decide grant strategy), S3 (compose rule body), and emit the OSS or Enterprise output per the user's edition answer. Use the username derived from the analyzed directory's basename (`<basename of $ARGUMENTS>`) — if it has invalid Redis username chars, fall back to `my-service-user`.
+> Run S1 (map commands → categories with version filtering), S3 (compose rule body — skip S2's collapse decision since granularity is hardcoded to strict; skip emitting `-@admin -@dangerous` from S3 step 9 since denies are hardcoded off), and emit the OSS or Enterprise output per the user's edition answer. Use the username derived from the analyzed directory's basename (`<basename of $ARGUMENTS>`) — if it has invalid Redis username chars, fall back to `my-service-user`.
 >
 > Required output sections, in order:
-> 1. The `ACL SETUSER <user> on ><changeme> ...` command (OSS) or rule body only (Enterprise)
+> 1. The `ACL SETUSER <user> on ><changeme> ...` command (OSS) or rule body only (Enterprise) — **no `-@admin -@dangerous` trailing denies**
 > 2. A clearly-flagged callout block before apply instructions explaining how to substitute the password: `><strong_password>` for non-local deployments, `nopass` (replacing the whole `><changeme>` token) for local-dev Redis without auth
 > 3. Per-term annotation table with source line citations from the discovery summary
-> 4. "Detected context" block (client library, edition, version + how known, defense-in-depth, granularity, MCP status, mapping notes)
+> 4. "Detected context" block (client library, edition, version + how known, MCP status, mapping notes)
 > 5. How to apply — `redis-cli` examples for both password and `nopass` cases
 > 6. Do NOT offer "type apply" — MCP can't run `ACL SETUSER`
 >
@@ -213,7 +203,7 @@ If `Write` still fails or the user denies the permission prompt, fall back: tell
 Do NOT re-emit the agent's full output to the user. The detailed view lives in the `.md` file. Your Claude Code message should be tight:
 
 ```markdown
-✅ Rule generated for `<username>` (Redis <edition> <version>, <N> commands, <granularity>)
+✅ Rule generated for `<username>` (Redis <edition> <version>, <N> commands, strict least-privilege)
 
 **The rule:**
 

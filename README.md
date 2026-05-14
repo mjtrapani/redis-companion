@@ -6,7 +6,7 @@ A Claude Code plugin for scoping a backend service's Redis access to the minimum
 
 ## What it does
 
-You point it at a backend service's directory. It detects the Redis client library, infers the access patterns (keys, channels, streams, commands), asks you a few targeted questions (target edition, version, permission granularity, defense-in-depth preference), and emits a Redis ACL rule that grants only what the service actually needs.
+You point it at a backend service's directory. It detects the Redis client library, infers the access patterns (keys, channels, streams, commands), asks you two targeted questions (target edition and version — plus an optional follow-up if it finds a `TODO` hinting at planned commands), and emits a Redis ACL rule that grants only what the service actually needs.
 
 For Redis OSS, it emits a full `ACL SETUSER` command ready to paste into `redis-cli`. For Redis Enterprise and Redis Cloud, it emits just the ACL Rule body — paste into the admin UI or REST API.
 
@@ -64,7 +64,7 @@ The plugin will:
 1. Detect `redis-py` from the imports + `requirements.txt`
 2. Find the key patterns (`cache:user:*`, `session:*`), the stream key (`activity:events`), and the pub/sub channel (`notifications`)
 3. Inventory the commands: `SET`, `GET`, `MGET`, `SETEX`, `PUBLISH`, `XADD`
-4. Ask you 4–5 questions: target Redis **edition**, **version** (confirms from `INFO SERVER` when MCP is connected), **defense-in-depth deny** preference, **permission granularity**, and a 5th question for any speculation candidates surfaced from `TODO` comments
+4. Ask you 2–3 questions: target Redis **edition**, **version** (confirms from `INFO SERVER` when MCP is connected), and (if a `TODO` is detected near Redis calls) a question about whether to pre-emptively grant the planned commands
 5. Write `./acl-rule-sample-service.md` to your cwd — comprehensive output with annotations, detected context, and four apply patterns
 6. Emit a short summary in Claude Code with the rule, the file path, and the apply commands
 
@@ -147,7 +147,7 @@ flowchart TD
         SCAN -->|"structured discovery summary"| S
 
         S -->|Phase 2| ASK["<b>AskUserQuestion</b><br>structured pause"]:::red
-        ASK -->|"4 baseline questions<br>+ Q5 if speculation candidate"| USER([User picks options]):::entry
+        ASK -->|"2 baseline questions<br>+ Q3 if speculation candidate"| USER([User picks options]):::entry
         USER --> S
 
         S -->|Phase 3| A2["<b>acl-generator</b> agent<br>SYNTHESIS mode · Sonnet"]:::red
@@ -168,7 +168,7 @@ The plugin uses four Claude Code primitives — **two skills** (one orchestrator
 
 ### Skill: `rule` (orchestrator)
 
-In `skills/rule/`. Triggered by `/redis-companion:rule <path>` or by natural-language requests like *"scope a Redis ACL for ./my-service"*. Runs inline in the main conversation. Owns the interactive contract end-to-end: it dispatches the `acl-generator` agent in `DISCOVERY` mode, parses the structured findings, calls `AskUserQuestion` with the four baseline questions plus a fifth conditional question if discovery surfaced speculation candidates (TODOs near Redis calls), then dispatches the agent again in `SYNTHESIS` mode with the user's answers baked in.
+In `skills/rule/`. Triggered by `/redis-companion:rule <path>` or by natural-language requests like *"scope a Redis ACL for ./my-service"*. Runs inline in the main conversation. Owns the interactive contract end-to-end: it dispatches the `acl-generator` agent in `DISCOVERY` mode, parses the structured findings, calls `AskUserQuestion` with the two baseline questions (edition + version) plus a third conditional question if discovery surfaced speculation candidates (TODOs near Redis calls), then dispatches the agent again in `SYNTHESIS` mode with the user's answers baked in.
 
 `AskUserQuestion` is the load-bearing primitive — it's the only Claude Code mechanism that actually pauses the conversation for structured user input. Natural-language "wait for the user" instructions in agent prompts don't enforce a pause, which is why earlier versions of this plugin had the agent skipping questions and silently picking defaults.
 
@@ -266,6 +266,13 @@ Generalizes to any domain where the artifact is more than ~120 chars.
 The fix was a stricter synthesis instruction: *"use the upstream-derived map verbatim, do not infer from semantic similarity."* Switching the sub-agent to Sonnet was a separate decision (cost and latency on procedural work) — useful, but not the correctness fix.
 
 **`${CLAUDE_SKILL_DIR}` for plugin-bundle-relative reads.** Sub-agents inherit cwd from the user's invocation, not the plugin cache. So when the agent reads its reference docs, the skill prompts use `${CLAUDE_SKILL_DIR}/references/<file>.md` — an absolute path that Claude Code resolves to the plugin's actual install location. Relative paths silently read whatever happens to be in the user's project directory.
+
+**Strict-only granularity, no redundant denies.** Earlier versions of the plugin asked two more questions: *"permission granularity (strict / balanced / favor brevity)?"* and *"include defense-in-depth denies (`-@admin -@dangerous`)?"*. v1 hardcodes both:
+
+- **Granularity is always strict** — individual command grants only, never `+@category` collapse
+- **`-@admin -@dangerous` are omitted from the rule body** — with strict grants and the `nocommands` baseline (= `-@all`), the user has zero permissions by default and only the explicitly-granted commands are runnable. Adding `-@admin -@dangerous` would remove categories that were never granted — functional no-ops that just add visual noise. Defense-in-depth denies matter when using `+@category` grants, which v1 never emits.
+
+This removed two on-camera-explainable decisions for v1 and produced a cleaner rule. Configurable granularity (with the balanced/brevity modes and corresponding deny-clause emission) is preserved in the agent's S2 logic for future re-enablement.
 
 ## Limitations
 

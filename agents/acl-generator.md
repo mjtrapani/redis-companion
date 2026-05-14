@@ -74,7 +74,7 @@ For every Redis client call, map to its Redis command using the skill's `client-
 
 #### D7. Flag speculation candidates
 
-Strong inference signals — e.g., `# TODO: add subscribe` comment, `r.publish` used heavily but `r.subscribe` conspicuously absent — should be flagged in the summary but **never baked into a rule by you**. The skill surfaces these to the user via a Q5 in `AskUserQuestion`.
+Strong inference signals — e.g., `# TODO: add subscribe` comment, `r.publish` used heavily but `r.subscribe` conspicuously absent — should be flagged in the summary but **never baked into a rule by you**. The skill surfaces these to the user via the Q3 speculation question in `AskUserQuestion`.
 
 #### D8. Flag uncertain method→command mappings
 
@@ -158,7 +158,7 @@ After emitting the discovery summary, **stop**. Your work in Mode 1 is done.
 Invoked after the skill has gathered user answers via `AskUserQuestion`. The invocation prompt will include:
 
 - The full discovery summary from Mode 1 (verbatim, as a code block)
-- The user's answers to Q1–Q5 (edition, version, defense-in-depth, granularity, speculation candidates)
+- The user's answers to Q1–Q3 (edition, version, speculation candidates). **Note:** v1 hardcodes granularity to "strict least-privilege" and omits defense-in-depth denies (`-@admin -@dangerous`) from the rule body — the skill does not pass either as user inputs. Treat them as fixed: always strict, never emit category denies.
 - The username to assign (derived from the target directory basename, or `my-service-user` fallback)
 
 Your job: produce the final ACL rule with annotations and apply instructions. No further user input is needed. No tool calls beyond what you need to format the output (typically zero — synthesis is text-only).
@@ -192,7 +192,7 @@ Apply cross-version category re-classifications from `version-deltas.md` on top 
 
 #### S2. Decide grant strategy per category
 
-Apply the user's granularity preference (from Q4):
+**v1 hardcodes granularity to "strict" — skip this step.** The logic below remains for future re-enablement; for now, always emit individual command grants. If a future version of the skill re-introduces the granularity question, the original logic applies:
 
 - **Strict:** always emit individual command grants (`+CMD1 +CMD2 ...`). Never collapse to category, even if >50% of a category is used.
 - **Balanced:** for each category touched by the rule, compute `used / total` using the explicit count from `command-category-map.md` (its section header says `**N commands**`). **Only collapse if `used / total > 0.5`** for that specific category. If the ratio is `≤ 0.5`, emit individual command grants for the commands the service actually uses in that category — do NOT collapse. Note the ratios in the output's Detected Context block so the user can see why each category was or wasn't collapsed.
@@ -213,8 +213,8 @@ Order:
 5. **Channel reset:** `resetchannels`
 6. **Channel patterns:** `&pattern1 &pattern2 ...` (alphabetical)
 7. **Command baseline deny:** `nocommands` (alias for `-@all`) — **required for true least-privilege**
-8. **Positive grants:** `+CMD ...` or `+@category ...`, **grouped by category in code-flow order** (typically: writes → reads → pubsub → streams)
-9. **Defense-in-depth denies:** `-@admin -@dangerous` (only if user answered "yes" to Q3) — **placed LAST** so they correctly override any category grants via Redis ACL "later wins" precedence
+8. **Positive grants:** `+CMD ...` individual command grants, **grouped by category in code-flow order** (typically: writes → reads → pubsub → streams). With strict granularity hardcoded, never `+@category`.
+9. **No defense-in-depth denies.** v1 omits `-@admin -@dangerous` from the rule body. With strict individual grants and the `nocommands` baseline, these would be functional no-ops (they remove categories that were never granted). Keep the rule body clean.
 
 ### Synthesis output — branches on edition
 
@@ -224,7 +224,7 @@ Order:
 ## Redis ACL SETUSER command
 
 ```
-ACL SETUSER <username> on ><changeme> resetkeys ~<keys> resetchannels &<channels> nocommands +<writes> +<reads> +<pubsub> +<streams> -@admin -@dangerous
+ACL SETUSER <username> on ><changeme> resetkeys ~<keys> resetchannels &<channels> nocommands +<writes> +<reads> +<pubsub> +<streams>
 ```
 
 ## ⚠️ Before you apply — substitute the password term
@@ -247,11 +247,9 @@ Replace `><changeme>` with your actual credential choice:
 | ... | ... | ... |
 | `resetchannels` | Wipes any pre-existing `&pattern` grants | Self-contained rule; pub/sub defaults to restrictive on Redis 7+ |
 | `&<channel>` | Publish/subscribe on channel | <file:line> citations |
-| `nocommands` | Deny all commands as baseline (alias for `-@all`) | Required for least-privilege — without this, the user could run any command not in `@admin`/`@dangerous` |
+| `nocommands` | Deny all commands as baseline (alias for `-@all`) | Required for least-privilege — without this, the user could run any command not explicitly denied |
 | `+CMD` | <method> | <file:line> |
 | ... | ... | ... |
-| `-@admin` | Deny admin commands (CONFIG, DEBUG, SHUTDOWN, etc.) | Defense-in-depth (asked) |
-| `-@dangerous` | Deny dangerous commands (FLUSHDB, KEYS, MIGRATE, etc.) | Defense-in-depth (asked); critical for balanced/brevity granularity since `+@write` would otherwise pull in `FLUSHDB` |
 
 ## How to apply
 
@@ -301,7 +299,7 @@ EOF
 ### Pattern C — Single-line, all special tokens single-quoted
 
 ```bash
-redis-cli ACL SETUSER <username> on '<auth>' '~<key1>' '~<key2>' '&<chan>' '-@all' '-@admin' '-@dangerous' +<cmd1> +<cmd2>
+redis-cli ACL SETUSER <username> on '<auth>' '~<key1>' '~<key2>' '&<chan>' nocommands +<cmd1> +<cmd2>
 ```
 
 ### Pattern D — `users.acl` file (for `aclfile`-configured deployments)
@@ -352,8 +350,8 @@ redis-cli -u 'redis://<username>:<password>@<host>:<port>' FLUSHDB
 - **Client library:** <name> (<source>)
 - **Target Redis edition:** OSS (asked)
 - **Target Redis version:** Redis <major> (user-confirmed) — **effective version for filtering: `<exact_version>`** (from `INFO SERVER` directly when MCP was connected, e.g., `8.6.3`; OR from the user's minor-version follow-up when MCP was not connected, e.g., `Redis 7.4`)
-- **Defense-in-depth denies:** <included | not included> (asked)
-- **Permission granularity:** <strict | balanced | favor brevity> (asked)
+- **Permission granularity:** strict least-privilege (hardcoded in v1 — individual command grants only, no category collapse)
+- **Defense-in-depth denies:** omitted (hardcoded in v1 — `-@admin -@dangerous` are functional no-ops when the rule uses `nocommands` + individual grants)
 - **Speculation candidate(s):** <left out | included> (asked) — if any flagged in discovery
 - **MCP status:** <connected — Redis version read from INFO SERVER as <exact> | not connected — user-supplied minor version <X.Y> used>
 - **Mapping notes:** <from discovery>
@@ -365,7 +363,7 @@ redis-cli -u 'redis://<username>:<password>@<host>:<port>' FLUSHDB
 ## Redis ACL Rule body
 
 ```
-resetkeys ~<keys> resetchannels &<channels> nocommands +<writes> +<reads> +<pubsub> -@admin -@dangerous
+resetkeys ~<keys> resetchannels &<channels> nocommands +<writes> +<reads> +<pubsub>
 ```
 
 (No `on`, no password — Enterprise handles auth on the User object, separately from the Rule body.)
