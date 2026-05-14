@@ -1,7 +1,7 @@
 {
   "name": "redis-companion",
   "description": "Generates a version-aware, annotated Redis ACL rule scoped to the minimum permissions your service actually needs. For backend engineers locking down new or existing services — reads the code, infers the access patterns, emits the rule.",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "author": {
     "name": "Marko Trapani"
   },

@@ -118,22 +118,26 @@ For v1, use `ACL CAT` against the live database as the practical proxy for "what
 
 When working against a connected Redis (MCP), prefer `ACL CAT` and `ACL CAT @<category>` over any baked-in reference. Reasons:
 
-- Categories drift between Redis 6 / 7 / 8 — see `references/version-deltas.md`
+- Categories drift between Redis 6 / 7 / 8 — see the version-deltas reference below
 - Module commands (RedisJSON, RediSearch, RedisTimeSeries, etc.) only appear on the live server if the module is loaded
 - The `>50%` category-collapse decision becomes a direct count when you can list category commands live
 
-Fall back to the static `references/command-category-map.md` only when no MCP connection is available, or for offline reasoning. When falling back, surface a *"version drift possible — connect MCP for live verification"* note.
+Fall back to the static command-category-map reference (path below) only when no MCP connection is available, or for offline reasoning. When falling back, surface a *"version drift possible — connect MCP for live verification"* note.
 
 ---
 
-## Reference docs — what's in each, when to consult
+## Reference docs — absolute paths, what's in each, when to consult
 
-| Reference | When to consult |
-|-----------|-----------------|
-| `references/command-category-map.md` | You need an offline command-to-category lookup, or the inverse (which commands belong to `@write`). Structured **category → commands** with per-version columns (Redis 6 / 7 / 8). Includes common module categories (`@json`, `@search`, `@timeseries`, etc.) with a "module-loaded" caveat. |
-| `references/version-deltas.md` | The target Redis version affects the rule. Highlights `@scripting` split out of `@write` in Redis 7, ACL selectors and `%R~`/`%W~` in 7+, Redis 8's expansion of standard categories to module commands, and the pub/sub default flip. |
-| `references/client-library-patterns.md` | You're reading source code and need to map a client method to its underlying Redis command (e.g., `r.setex(...)` in redis-py → `SETEX`). Covers `redis-py`, `ioredis` (Node), and `go-redis`. |
-| `references/key-pattern-extraction.md` | You need to derive `~prefix:*` clauses from source code. Handles string literals, f-strings, concatenation, module-level constants, multi-pattern files, and fully-dynamic keys. The `~pattern` clause is the difference between a real security boundary and security theater. |
+**Important for agents:** the reference docs ship inside this plugin and live in the plugin's installed cache directory. Use the **absolute paths below** when calling `Read`. Do NOT use relative paths like `references/command-category-map.md` — those would resolve against your current working directory (the user's service repo), not the plugin's bundle, and would fail or read the wrong file.
+
+| Reference (absolute path) | When to consult |
+|---------------------------|-----------------|
+| `${CLAUDE_SKILL_DIR}/references/command-category-map.md` | You need an offline command-to-category lookup, or the inverse (which commands belong to `@write`). Structured **category → commands**, generated from `redis/redis@8.6.3` upstream, every command annotated with `Since:` version. |
+| `${CLAUDE_SKILL_DIR}/references/version-deltas.md` | The target Redis version affects the rule. Highlights `@scripting` split out of `@write` in Redis 7, ACL selectors and `%R~`/`%W~` in 7+, Redis 8's expansion of standard categories to module commands, and the pub/sub default flip. |
+| `${CLAUDE_SKILL_DIR}/references/client-library-patterns.md` | You're reading source code and need to map a client method to its underlying Redis command (e.g., `r.setex(...)` in redis-py → `SETEX`). Covers `redis-py`, `ioredis` (Node), and `go-redis`. |
+| `${CLAUDE_SKILL_DIR}/references/key-pattern-extraction.md` | You need to derive `~prefix:*` clauses from source code. Handles string literals, f-strings, concatenation, module-level constants, multi-pattern files, and fully-dynamic keys. The `~pattern` clause is the difference between a real security boundary and security theater. |
+
+`${CLAUDE_SKILL_DIR}` is substituted to the absolute install path of this skill at load time (e.g., `~/.claude-personal/plugins/cache/redis-companion/redis-companion/<version>/skills/acl-reference`).
 
 ---
 

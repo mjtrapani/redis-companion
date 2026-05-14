@@ -167,7 +167,16 @@ Your job: produce the final ACL rule with annotations and apply instructions. No
 
 #### S1. Map commands → categories using the upstream-derived map, filtered by exact version
 
-For each command in the discovery inventory, **explicitly look up its categories in the skill's `command-category-map.md`** (generated from `redis/redis@8.6.3/src/commands/*.json` — regeneratable via `scripts/build-category-map.py`). Read the actual file via the `Skill` tool or by reading the reference path directly — **do NOT infer categories from training data or first-principles reasoning about what the command does.** The map is the authoritative source.
+For each command in the discovery inventory, **explicitly look up its categories in the bundled `command-category-map.md`**. The map is generated from `redis/redis@8.6.3/src/commands/*.json` and ships inside the plugin's `acl-reference` skill — it's the authoritative source.
+
+**How to load the map correctly:**
+
+1. Invoke the `redis-companion:acl-reference` skill via the `Skill` tool. The skill's content (with `${CLAUDE_SKILL_DIR}` substituted to the plugin's installed cache path) gives you absolute paths to all four reference docs.
+2. Use the `Read` tool with the absolute path from the skill content (e.g., `~/.claude-personal/plugins/cache/redis-companion/redis-companion/<version>/skills/acl-reference/references/command-category-map.md`).
+
+**Do NOT** use a relative path like `Read('skills/acl-reference/references/command-category-map.md')` or `Read('references/command-category-map.md')`. Your current working directory is the user's service repo, not the plugin bundle — relative reads will either fail (clean install) or read a wrong/stale file (developer who happens to have the plugin source checked out).
+
+**Do NOT** infer categories from training data or first-principles reasoning about what the command does. Always look up.
 
 **Why this matters:** Training-data category recall is unreliable. A previous run hallucinated that `PUBLISH` is in `@write` because pub/sub "writes" to channels — but `PUBLISH` is in `@pubsub`, not `@write`, per upstream Redis source. A rule emitting `+@write` without `+@pubsub` (or without explicit `+PUBLISH`) silently fails on every publish call. Look up each command in the map; do not reason about what its category "should" be.
 
