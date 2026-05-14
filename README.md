@@ -193,7 +193,9 @@ When a client library method isn't in the skill's reference, the agent makes one
 
 ### Hook: `credential-guard`
 
-PreToolUse hook on Write / Edit / MultiEdit, in `hooks/`. Blocks file writes that contain literal Redis credentials — connection strings with embedded passwords, `REDIS_PASS=` set to a real value, or `redis-cli -a <password>` invocations. Recognized placeholders (`><changeme>`, `${REDIS_PASS}`, `$REDIS_PASS`, etc.) pass through, so the agent's own output isn't blocked.
+PreToolUse hook on `Write` / `Edit` / `MultiEdit`, in `hooks/`. Scans every file write Claude makes in this repo for literal Redis credentials — passwords embedded in URLs, `REDIS_PASS=` set to a real value, `redis-cli -a <password>` invocations. Blocks the write if a match is found. Recognized placeholders (`><changeme>`, `${REDIS_PASS}`, `$REDIS_PASS`, etc.) pass through.
+
+**Why it matters.** The agent's output contract is *"always use `<changeme>` as the password placeholder, never embed a real password in the file the plugin writes."* The hook is what makes that contract enforced *from outside the agent*. The agent honors the contract today; the hook is what keeps it enforced if anything ever breaks the agent's adherence — model drift, prompt injection from an untrusted file the agent reads, or a user asking Claude in this repo to "just save my redis URL with the password into a config." For a plugin whose entire job is generating credentials-adjacent artifacts, the hook is the project-level invariant that real secrets don't end up on disk via Claude — regardless of who or what is driving the session. It's also the most directly portable piece of the plugin: forks for Postgres, AWS IAM, or Kubernetes RBAC keep the hook and just swap the regex set.
 
 ### MCP config
 
@@ -215,6 +217,8 @@ A few non-obvious decisions, both because they matter for understanding the plug
 
 ## Limitations
 
+**The Redis MCP today doesn't expose ACL commands — this is the single biggest gap in v1.** `redis/mcp-redis` is data-plane-only: `INFO SERVER` works, but `ACL SETUSER`, `ACL GETUSER`, `ACL CAT`, and `AUTH` don't. Net effect: apply is manual via `redis-cli`, the agent reads category contents from the upstream-derived offline map rather than the live server (blind to deployment-specific customization — custom categories, loaded modules, non-core versions), and verification + impersonation tests are user-driven. *Gap-closing options in [What's next](#whats-next).*
+
 **Client-library coverage in v1.** The plugin documents detection patterns and method-to-command mappings for **`redis-py` (Python), `ioredis` (Node.js), and `go-redis` (Go)** — see `skills/acl-reference/references/client-library-patterns.md`. However, only `redis-py` has been **end-to-end tested** via the included `examples/sample-service/` fixture. The `ioredis` and `go-redis` patterns are derived from each library's published API but have not been exercised against a real codebase. If you run the plugin against a Node.js or Go service and the discovery output looks off, file an issue with a representative call site — the patterns are easy to refine once we see real usage.
 
 Without MCP, the skill asks for the target Redis **major version** (6 / 7 / 8) and then for the **minor version** (e.g., 8.0 / 8.2 / 8.4 / 8.6) in a follow-up question — the category-map filter is keyed on `Since: <= <effective_version>` to-the-minor, and package files reveal client library version, not server version. With MCP, `INFO SERVER` provides the exact version, which the skill surfaces for confirm-or-override rather than asking blindly.
@@ -230,7 +234,7 @@ The agent **flags but doesn't silently bake** these:
 
 The biggest future-work items:
 
-- **Close the live-apply loop via a Redis ACL MCP.** The single biggest constraint of v1: `redis/mcp-redis` is data-plane only — it doesn't expose `ACL CAT`, `ACL LIST`, `ACL SETUSER`, or `ACL WHOAMI`, so apply is manual via `redis-cli`. Contributing ACL tools upstream to `redis/mcp-redis`, building a sidecar MCP that wraps `redis-cli`, or extending the Redis Cloud admin MCP with ACL/user/role endpoints would unlock the full safety-gated apply → verify (`ACL GETUSER`) → impersonation-test workflow the agent already has scaffolded.
+- **Close the live-apply loop via a Redis ACL MCP** (see *Limitations* above for the gap). Three paths forward: (a) contribute ACL tools upstream to `redis/mcp-redis`, (b) build a sidecar MCP that wraps `redis-cli` for the ACL command family, or (c) extend the Redis Cloud admin MCP (today scoped to subscription/infra) with ACL/user/role endpoints. Any one of these unlocks the safety-gated apply → `ACL GETUSER` verify → impersonation-test workflow the agent already has scaffolded.
 - **Execute Enterprise provisioning end-to-end** — generate the REST API JSON payload and make the call, either by extending the Redis Cloud admin MCP (which today scopes to subscription/infra, not ACL/user/role) or by having the agent make raw Enterprise REST API calls.
 - **Multi-client / multi-language analysis in a single pass.** If a codebase uses both `redis-py` and `go-redis`, v1 asks which to focus on first and handles one at a time. A future pass could merge the inventories and union the resulting ACL clauses.
 - **MCP-driven `MONITOR` for client-mapping verification** — when an ambiguous client method is flagged, run `MONITOR` against a user-specified test target, capture the actual wire commands, and use those to disambiguate. Closes the loop on "can this be known without reviewing client source."

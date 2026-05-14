@@ -18,6 +18,9 @@ npm-debug.log*
 .idea/
 *.swp
 
+# Claude Code per-user state (settings.local.json contains personal permission grants)
+.claude/
+
 # Env
 .env
 .env.local

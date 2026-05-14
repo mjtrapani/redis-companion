@@ -16,7 +16,7 @@ Four cooperating components, each doing one job:
 |-----------|-----|---------------|
 | **Skill** (knowledge) | Authoritative reference content — syntax, version deltas, mappings. Auto-loads on relevant conversation. | Reusable across agents and across sessions. Updating the syntax reference is a doc change, not a code change. |
 | **Agent** (task) | The specific workflow: scan code → ask the user → synthesize → emit annotated output. Read-only filesystem, dedicated tool allowlist. | One agent = one task. Keeps the workflow legible and testable. Inherits skills + MCP tools from the session. |
-| **Hook** (guardrail) | Local safety net — blocks committed credentials, malformed configs, or other "you didn't mean to do that" cases on `PreToolUse`. | Defense-in-depth. The agent could be perfect and the user could still paste a secret into a file by hand. The hook catches that. |
+| **Hook** (guardrail) | Project-level invariant enforced from outside the agent. Scans every `Write`/`Edit` Claude makes for a domain-specific failure shape (here: literal credentials) and blocks the call if it matches. | The agent's output contract is "never embed a real credential in the file." The hook is what keeps that contract enforced if the agent ever stops honoring it — model drift, prompt injection, or the user asking Claude to "just save my password somewhere." Defense-in-depth, and the most portable piece across forks. |
 | **MCP** (live state) | External tool integration — talk to the target system itself (Redis, Postgres, K8s, AWS, etc.) for live validation, current-state queries, or (with explicit confirmation) actual application of the generated artifact. | Plugs you into the ecosystem without rebuilding it. When connected, the agent can sanity-check its output against reality and (carefully) close the loop. |
 
 **Why this separation matters**: it lets the *agent* stay focused on its workflow, the *skill* stay focused on knowledge, the *hook* stay focused on safety, and the *MCP* stay focused on external integration. Each can be updated independently. A customer forking your plugin replaces the skill's reference docs and the agent's domain instructions — without rewriting anything else.
@@ -89,11 +89,11 @@ Same shape, different domain. Each one is a real plugin idea you could ship in a
 
 4. **Adapt the hook's pattern matchers**
 
-   `hooks/credential-guard.py` has a `PATTERNS` list of regexes for Redis credentials. Replace them with your domain's credential shapes (Postgres connection strings, kubeconfig tokens, AWS access keys, etc.). Keep the placeholder allow-list — it's how the agent's own output passes through unmolested.
+   `hooks/credential-guard.py` has a `PATTERNS` list of regexes for Redis credentials. Replace them with your domain's credential shapes (Postgres connection strings, kubeconfig tokens, AWS access keys, etc.). Keep the placeholder allow-list — it's how the agent's own output (which uses `<changeme>` and friends) passes through. The hook's value is in being the *outside-the-agent* enforcement of "no real credentials touch disk via Claude in this repo" — your domain's customer gets the same guarantee for free as long as your regex set is reasonably complete.
 
 5. **Swap the MCP**
 
-   `.mcp.json` points at the Redis MCP server. Replace with the MCP server for your domain. Many domains have one already published (Postgres, Kubernetes, AWS, GitHub, Stripe, etc.). If your domain doesn't yet, the plugin still works without MCP — the agent just operates in degraded mode (no live validation, no apply).
+   The `mcpServers` block in `.claude-plugin/plugin.json` declares the Redis MCP server. Replace with the MCP server for your domain. Many domains have one already published (Postgres, Kubernetes, AWS, GitHub, Stripe, etc.). If your domain doesn't yet, the plugin still works without MCP — the agent just operates in degraded mode (no live validation, no apply).
 
 6. **Update the README and this guide**
 
