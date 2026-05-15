@@ -47,7 +47,7 @@ To verify either install, run `/agents` in the Claude Code prompt — you should
 
 You can also confirm the knowledge-base skill is active by asking something Redis-adjacent, like *"what does `+@read` grant in Redis 7?"* — the `acl-reference` skill should auto-load (you won't see it in the slash menu by design — it's a model-invocable knowledge base, not an action command) and inform Claude's answer.
 
-## Try the demo
+## Try it on the sample service
 
 A ~40-line sample service is included at `examples/sample-service/`. It uses `redis-py` and exercises strings (`SET`/`GET`/`MGET`/`SETEX`), pub/sub (`PUBLISH`), and streams (`XADD`). Run `python3 examples/sample-service/service.py` directly to exercise every function once with sample data — the file is both the library AND its own smoke test (see the `if __name__ == "__main__":` block).
 
@@ -76,7 +76,7 @@ scope a Redis ACL for examples/sample-service
 
 ### Apply and validate end-to-end
 
-The demo's strongest beat: *apply* the rule and watch the service still work under it.
+The strongest validation: *apply* the rule and watch the service still work under it.
 
 ```bash
 # 1. Apply the rule (inline-sed swaps the placeholder for nopass for local-dev)
