@@ -140,23 +140,23 @@ flowchart TD
     U([User]):::entry -->|"/redis-companion:rule path"| S
 
     subgraph P["redis-companion plugin"]
-        S["<b>rule</b> skill · orchestrator<br>inline · main conversation"]:::red
+        S["<b>rule</b> skill<br><i>inline orchestrator</i>"]:::red
 
-        S --> A1["<b>acl-generator</b> agent · DISCOVERY<br>read source · detect client library<br>extract key/channel/stream patterns"]:::red
-        A1 <-->|"INFO SERVER"| MCP[("<b>Redis MCP</b><br>live server connection")]:::node
+        S --> A1["<b>acl-generator</b> agent<br><i>DISCOVERY mode</i><br>reads source files<br>detects client library<br>extracts key/channel/stream patterns"]:::red
+        A1 <-->|"INFO SERVER"| MCP[("<b>Redis MCP</b><br><i>live server connection</i>")]:::node
         A1 -->|"discovery summary"| S
 
-        S --> ASK["<b>AskUserQuestion</b><br>2 baseline questions<br>+ Q3 if speculation candidate"]:::red
+        S --> ASK["<b>AskUserQuestion</b><br><i>structured pause</i><br>edition (OSS / Enterprise)<br>version (confirm or override)<br>+ speculation Q if TODO found"]:::red
         ASK -->|"answers"| S
 
-        S --> A2["<b>acl-generator</b> agent · SYNTHESIS<br>look up commands · filter by Since<br>compose rule + per-term annotations"]:::red
-        A2 -->|"reads"| REF[("<b>acl-reference</b> skill · knowledge base<br>command-category-map.md<br>version-deltas.md · client-patterns")]:::node
+        S --> A2["<b>acl-generator</b> agent<br><i>SYNTHESIS mode</i><br>looks up commands in category map<br>filters by Since ≤ target version<br>composes rule + per-term annotations"]:::red
+        A2 -->|"reads"| REF[("<b>acl-reference</b> skill<br><i>knowledge base</i><br>command-category-map.md<br>version-deltas.md<br>client-library-patterns.md")]:::node
         A2 -->|"rule + annotations"| S
 
-        S --> W["Write <b>./acl-rule-username.md</b><br>+ emit condensed prompt with rule + apply"]:::red
+        S --> W["<b>Write ./acl-rule-username.md</b><br><i>plus condensed prompt</i><br>full report to file<br>short apply commands inline"]:::red
 
-        H["<b>credential-guard</b> hook<br>PreToolUse on Write/Edit"]:::hook
-        H -.->|"scans for literal credentials"| W
+        H["<b>credential-guard</b> hook<br><i>PreToolUse on Write/Edit</i><br>scans for literal credentials<br>placeholders pass through"]:::hook
+        H -.-> W
     end
 
     W -->|"condensed prompt message"| U
