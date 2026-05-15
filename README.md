@@ -140,24 +140,23 @@ flowchart TD
     U([User]):::entry -->|"/redis-companion:rule path"| S
 
     subgraph P["redis-companion plugin"]
-        S["<b>rule</b> skill orchestrator<br>inline · main conversation"]:::red
+        S["<b>rule</b> skill · orchestrator<br>inline · main conversation"]:::red
 
-        S -->|Phase 1| A1["<b>acl-generator</b> agent<br>DISCOVERY mode · Sonnet"]:::red
-        A1 --> SCAN["Read source files · detect client library<br>extract key/channel/stream patterns<br>INFO SERVER via MCP (version)"]:::node
-        SCAN -->|"structured discovery summary"| S
+        S -->|Phase 1| A1["<b>acl-generator</b> agent · DISCOVERY<br>read source · detect client library<br>extract key/channel/stream patterns"]:::red
+        A1 <-->|"INFO SERVER → version"| MCP[("<b>Redis MCP</b><br>live server connection")]:::node
+        A1 -->|"structured discovery summary"| S
 
-        S -->|Phase 2| ASK["<b>AskUserQuestion</b><br>structured pause"]:::red
-        ASK -->|"2 baseline questions<br>+ Q3 if speculation candidate"| USER([User picks options]):::entry
-        USER --> S
+        S -->|Phase 2| ASK["<b>AskUserQuestion</b><br>2 baseline questions<br>+ Q3 if speculation candidate"]:::red
+        ASK -->|"user picks options"| S
 
-        S -->|Phase 3| A2["<b>acl-generator</b> agent<br>SYNTHESIS mode · Sonnet"]:::red
-        A2 --> SYNTH["Look up commands in upstream-derived<br>command-category-map.md · filter by Since<br>compose rule + per-term annotations"]:::node
-        SYNTH -->|"comprehensive output"| S
+        S -->|Phase 3| A2["<b>acl-generator</b> agent · SYNTHESIS<br>look up commands · filter by Since<br>compose rule + per-term annotations"]:::red
+        A2 -->|"reads"| REF[("<b>acl-reference</b> skill · knowledge base<br>command-category-map.md<br>version-deltas.md · client-patterns")]:::node
+        A2 -->|"comprehensive output"| S
 
-        S --> W["Write <b>./acl-rule-username.md</b><br>+ emit condensed prompt message<br>with rule + apply commands"]:::red
+        S --> W["Write <b>./acl-rule-username.md</b><br>+ emit condensed prompt with rule + apply"]:::red
 
         H["<b>credential-guard</b> hook<br>PreToolUse on Write/Edit"]:::hook
-        H -.->|"scans for literal credentials<br>recognized placeholders pass through"| W
+        H -.->|"scans for literal credentials"| W
     end
 
     W -->|"condensed prompt message"| U
