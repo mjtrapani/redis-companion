@@ -142,16 +142,16 @@ flowchart TD
     subgraph P["redis-companion plugin"]
         S["<b>rule</b> skill · orchestrator<br>inline · main conversation"]:::red
 
-        S -->|Phase 1| A1["<b>acl-generator</b> agent · DISCOVERY<br>read source · detect client library<br>extract key/channel/stream patterns"]:::red
-        A1 <-->|"INFO SERVER → version"| MCP[("<b>Redis MCP</b><br>live server connection")]:::node
-        A1 -->|"structured discovery summary"| S
+        S --> A1["<b>acl-generator</b> agent · DISCOVERY<br>read source · detect client library<br>extract key/channel/stream patterns"]:::red
+        A1 <-->|"INFO SERVER"| MCP[("<b>Redis MCP</b><br>live server connection")]:::node
+        A1 -->|"discovery summary"| S
 
-        S -->|Phase 2| ASK["<b>AskUserQuestion</b><br>2 baseline questions<br>+ Q3 if speculation candidate"]:::red
-        ASK -->|"user picks options"| S
+        S --> ASK["<b>AskUserQuestion</b><br>2 baseline questions<br>+ Q3 if speculation candidate"]:::red
+        ASK -->|"answers"| S
 
-        S -->|Phase 3| A2["<b>acl-generator</b> agent · SYNTHESIS<br>look up commands · filter by Since<br>compose rule + per-term annotations"]:::red
+        S --> A2["<b>acl-generator</b> agent · SYNTHESIS<br>look up commands · filter by Since<br>compose rule + per-term annotations"]:::red
         A2 -->|"reads"| REF[("<b>acl-reference</b> skill · knowledge base<br>command-category-map.md<br>version-deltas.md · client-patterns")]:::node
-        A2 -->|"comprehensive output"| S
+        A2 -->|"rule + annotations"| S
 
         S --> W["Write <b>./acl-rule-username.md</b><br>+ emit condensed prompt with rule + apply"]:::red
 
